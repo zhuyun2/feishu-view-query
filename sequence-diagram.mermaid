@@ -1,0 +1,110 @@
+%% 卡片视图核心流程时序图（4 张）
+
+%% ========== 1. 视图首次加载 ==========
+sequenceDiagram
+  participant Host as 飞书宿主
+  participant App as 插件App(Root)
+  participant Repo as ConfigRepository
+  participant Store as ViewStore
+  participant DS as SdkRecordDataSource
+  participant Grid as CardGrid
+
+  Host->>App: 加载插件 url（平台托管）
+  App->>Host: bitable.base.getSelection()
+  Host-->>App: { tableId, viewId }
+  App->>Host: table.getFieldMetaList() / getViewMetaList()
+  Host-->>App: 字段/视图元数据
+  App->>Repo: load(viewId)
+  Repo->>Host: bridge.getData('cbv:config:'+viewId)
+  Host-->>Repo: ConfigEnvelope | null
+  Repo->>Repo: checksum 校验 + migrate(schemaVersion)
+  alt 配置缺失或损坏
+    Repo-->>App: { config:null|default, degraded:true }
+  else 配置正常
+    Repo-->>App: { config, source:'bridge' }
+  end
+  App->>Store: hydrateConfig(config)
+  App->>DS: loadPage({ viewId, pageSize:100 })
+  DS->>Host: table.getRecordsByPage(...)
+  Host-->>DS: { records, pageToken, hasMore }
+  DS-->>Store: 首批记录
+  Store->>Grid: renderVisible(skeleton → cards)
+  Grid-->>Host: 首屏卡片可见（≤3s）
+  Note over Grid,DS: 滚动接近底部 → loadPage(pageToken) 增量取数
+
+%% ========== 2. 拖拽配置并保存 ==========
+sequenceDiagram
+  participant U as 用户
+  participant Editor as ConfigDrawer
+  participant DnD as DndEngine
+  participant Draft as DraftStore
+  participant Preview as PreviewCard
+  participant Repo as ConfigRepository
+  participant Host as 飞书宿主
+
+  U->>Editor: 点击 ⚙ 配置（有权限）
+  Editor->>Draft: snapshot(currentConfig)
+  U->>DnD: 从字段池拖拽字段
+  DnD->>Draft: applyPlacement(placement)
+  Draft->>Preview: 脏值广播（≤300ms）
+  Preview-->>U: 实时预览刷新
+  U->>Editor: 点击 保存
+  Editor->>Repo: save(viewId, draftConfig)
+  Repo->>Host: bridge.getData(key) 写前读
+  Host-->>Repo: 最新 envelope
+  alt updatedAt 一致（无冲突）
+    Repo->>Host: bridge.setData(key, newEnvelope)
+    Host-->>Repo: true
+    Repo-->>Editor: { ok:true }
+    Editor->>Draft: commit()
+  else 他人已修改 / 写入失败
+    Repo-->>Editor: { ok:false, conflict:true }
+    Editor->>Draft: rollback(prevSnapshot)
+    Editor-->>U: 提示冲突 + 提供"重新加载配置"
+  end
+
+%% ========== 3. 点击展开详情 ==========
+sequenceDiagram
+  participant U as 用户
+  participant Card as CardItem
+  participant Det as DetailDrawer
+  participant Cache as RecordCache
+  participant DS as SdkRecordDataSource
+  participant Host as 飞书宿主
+
+  U->>Card: 点击卡片（非交互区）
+  Card->>Det: open(recordId)
+  Det->>Cache: get(recordId)
+  alt 缓存命中
+    Cache-->>Det: record
+  else 缓存未命中
+    Det->>DS: loadRecord(recordId)
+    DS->>Host: table.getRecordById(recordId)
+    Host-->>DS: record
+    DS-->>Cache: set(recordId, record)
+    Cache-->>Det: record
+  end
+  Det->>Det: 按 DetailConfig 渲染
+  Det-->>U: 250ms 右侧滑入（非模态）
+  U->>Det: Esc / 点遮罩 / ✕
+  Det->>Card: close() + 焦点回到原卡片
+
+%% ========== 4. 悬浮预览（150ms 延迟触发） ==========
+sequenceDiagram
+  participant U as 用户
+  participant Card as CardItem
+  participant Hover as useHoverIntent
+  participant Pop as HoverPreview
+
+  U->>Card: mouseenter
+  Card->>Hover: onEnter()
+  Hover->>Hover: 启动 150ms 计时器
+  alt 150ms 内未移出
+    Hover->>Pop: show(recordId, 简要值)
+    Pop-->>U: 150ms 淡入 + 上移 4px
+  else 150ms 内移出
+    Hover->>Hover: 取消计时器（不显示）
+  end
+  U->>Card: mouseleave（含浮层）
+  Hover->>Hover: 200ms 宽限计时
+  Hover->>Pop: hide()

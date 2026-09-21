@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI 评审原型 · 飞书多维表格「卡片视图」</title>
+<!--
+  ============================================================================
+  index.html —— 飞书多维表格「卡片视图」UI 评审原型（评审看板）
+  ----------------------------------------------------------------------------
+  ⚠️ 这是「UI 评审原型」，用于在写业务代码之前评审界面设计，不是生产代码。
+     - 零外部依赖：不引用任何 CDN / 外链字体 / 外链图片；图标为内联 SVG 或字形。
+     - 全部为静态假数据（服装商品档案），无任何网络请求。
+     - 双击本文件即可离线打开；仅浅色主题；按桌面端 1280px+ 设计。
+     - 左侧导航：S1~S6 + 交互演示；默认展示 S1。
+  ============================================================================
+-->
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- 顶部评审提示条 -->
+<div class="review-banner">
+  <b>UI 评审原型</b> · 静态假数据 · 非生产代码 · 桌面端 1280px+
+</div>
+
+<!-- 内联 SVG 图标精灵（零外部资源） -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13.6 8a5.6 5.6 0 1 1-1.7-4l1.3-1.3V6H9.5l1.4-1.4A4 4 0 1 0 12 8h1.6z" fill="currentColor"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 16 16"><path d="M8 10.2a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4zm5.3-1.1-.9-.5a4.5 4.5 0 0 0 0-1.2l.9-.5a.5.5 0 0 0 .2-.6l-.9-1.5a.5.5 0 0 0-.6-.2l-1 .4a4.4 4.4 0 0 0-1-.6l-.2-1a.5.5 0 0 0-.5-.4H7.7a.5.5 0 0 0-.5.4l-.2 1c-.4.1-.7.3-1 .6l-1-.4a.5.5 0 0 0-.6.2l-.9 1.5a.5.5 0 0 0 .2.6l.9.5a4.5 4.5 0 0 0 0 1.2l-.9.5a.5.5 0 0 0-.2.6l.9 1.5c.1.2.4.3.6.2l1-.4c.3.2.6.4 1 .6l.2 1c0 .2.2.4.5.4h1.6c.3 0 .5-.2.5-.4l.2-1c.4-.1.7-.3 1-.6l1 .4c.2.1.5 0 .6-.2l.9-1.5a.5.5 0 0 0-.2-.6z" fill="currentColor"/></symbol>
+  <symbol id="i-more" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.4" fill="currentColor"/><circle cx="8" cy="8" r="1.4" fill="currentColor"/><circle cx="12.5" cy="8" r="1.4" fill="currentColor"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><path d="M10.5 9.2h-.6l-.2-.2A4.9 4.9 0 1 0 8.5 10l.2.2v.6l3 3 1-1-3-3zm-4.2 0A3.4 3.4 0 1 1 9.7 5.8 3.4 3.4 0 0 1 6.3 9.2z" fill="currentColor"/></symbol>
+  <symbol id="i-close" viewBox="0 0 16 16"><path d="M12.3 4.7 8.7 8.3l3.6 3.6-.9.9L7.8 9.2l-3.6 3.6-.9-.9L6.9 8.3 3.3 4.7l.9-.9 3.6 3.6 3.6-3.6z" fill="currentColor"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 16 16"><path d="M6 2v1.6H3.6V6H2V2h4zm8 0v4h-1.6V3.6H10V2h4zM6 14H2v-4h1.6v2.4H6V14zm8 0h-4v-1.6h2.4V10H14v4z" fill="currentColor"/></symbol>
+  <symbol id="i-print" viewBox="0 0 16 16"><path d="M4 2h8v3H4V2zm-1 4h10a2 2 0 0 1 2 2v3h-2v3H3v-3H1V8a2 2 0 0 1 2-2zm2 4v3h6v-3H5zm8-2a.8.8 0 1 0 0-1.6.8.8 0 0 0 0 1.6z" fill="currentColor"/></symbol>
+  <symbol id="i-sort" viewBox="0 0 16 16"><path d="M5 13V3M5 3 2.5 5.5M5 3l2.5 2.5M11 3v10M11 13l-2.5-2.5M11 13l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-collapse" viewBox="0 0 16 16"><path d="M6 10 2.5 13.5M6 10H3M6 10v3M10 6l3.5-3.5M10 6h3M10 6V3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<div class="app">
+
+  <!-- ===================== 左侧导航 ===================== -->
+  <nav class="side-nav">
+    <div class="brand">卡片视图 · 评审件<small>飞书多维表格插件</small></div>
+    <div class="nav-group-title">浏览与详情</div>
+    <button class="nav-item active" data-screen="s1"><span class="k">S1</span>浏览态 · 卡片墙</button>
+    <button class="nav-item" data-screen="s2"><span class="k">S2</span>详情抽屉 · A4 文档</button>
+    <div class="nav-group-title">配置态</div>
+    <button class="nav-item" data-screen="s3"><span class="k">S3</span>卡片排版编辑器</button>
+    <button class="nav-item" data-screen="s4"><span class="k">S4</span>文档排版编辑器</button>
+    <div class="nav-group-title">系统</div>
+    <button class="nav-item" data-screen="s5"><span class="k">S5</span>空态 / 异常态集</button>
+    <button class="nav-item" data-screen="s6"><span class="k">S6</span>设计规范</button>
+    <button class="nav-item" data-screen="demo"><span class="k">▶</span>交互演示</button>
+  </nav>
+
+  <!-- ===================== 主内容区 ===================== -->
+  <main class="stage">
+
+    <!-- ============================================================ -->
+    <!-- S1 · 浏览态 · 卡片墙                                          -->
+    <!-- ============================================================ -->
+    <section class="screen active" id="s1">
+      <div class="view-toolbar">
+        <span class="vt-title">商品档案 · 卡片视图</span>
+        <span class="vt-count">共 1,248 条</span>
+        <input class="input vt-search" type="text" placeholder="搜索记录…">
+        <div class="vt-chips">
+          <span class="chip on">季节 = 2026 秋冬 ✕</span>
+          <span class="chip on">状态 ≠ 已下架 ✕</span>
+        </div>
+        <button class="chip" title="排序"><svg><use href="#i-sort"/></svg>排序</button>
+        <span class="spacer"></span>
+        <div class="vt-actions">
+          <button class="btn icon" title="刷新"><svg><use href="#i-refresh"/></svg></button>
+          <button class="btn icon" title="排版配置"><svg><use href="#i-settings"/></svg></button>
+          <button class="btn icon" title="更多"><svg><use href="#i-more"/></svg></button>
+        </div>
+      </div>
+
+      <div class="card-region">
+        <div class="card-grid" id="cardGrid">
+
+          <!-- 卡片 1 -->
+          <div class="card js-goto-detail">
+            <div class="slot-title">
+              <div class="card-code num">W26-0813</div>
+              <div class="card-name">女士羊毛混纺大衣</div>
+            </div>
+            <div class="slot-subtitle">外套 / 大衣 · 2026 秋冬 · 无锡恒隆纺织</div>
+            <div class="slot-divider"></div>
+            <div class="slot-attributes">
+              <div class="attr-row"><span class="attr-label">成本价</span><span class="attr-sep">:</span><span class="attr-value money num">¥286.00</span></div>
+              <div class="attr-row"><span class="attr-label">吊牌价</span><span class="attr-sep">:</span><span class="attr-value money num">¥899.00</span></div>
+              <div class="attr-row"><span class="attr-label">上市日期</span><span class="attr-sep">:</span><span class="attr-value num">2026-09-18</span></div>
+            </div>
+            <div class="slot-footer">
+              <span class="badge success">已上市</span>
+              <span class="gross num">68.2%</span>
+            </div>
+          </div>
+
+          <!-- 卡片 2 —— 悬浮预览改为真 hover 触发（见文末 #sharedPreview） -->
+          <div class="card js-goto-detail">
+            <div class="slot-title">
+              <div class="card-code num">W26-0814</div>
+              <div class="card-name">男士商务休闲西装</div>
+            </div>
+            <div class="slot-subtitle">外套 / 西装 · 2026 秋冬 · 苏州锦华制衣</div>
+            <div class="slot-divider"></div>
+            <div class="slot-attributes">
+              <div class="attr-row"><span class="attr-label">成本价</span><span class="attr-sep">:</span><span class="attr-value money num">¥420.00</span></div>
+              <div class="attr-row"><span class="attr-label">吊牌价</span><span class="attr-sep">:</span><span class="attr-value money num">¥1,299.00</span></div>
+              <div class="attr-row"><span class="attr-label">上市日期</span><span class="attr-sep">:</span><span class="attr-value num">2026-09-25</span></div>
+            </div>
+            <div class="slot-footer">
+              <span class="badge warning">待上市</span>
+              <span class="gross num">67.7%</span>
+            </div>
+            <!-- 悬浮预览气泡已改为全局共享元素 #sharedPreview，由 JS 真 hover 追加 -->
+          </div>
+
+          <!-- 卡片 3 -->
+          <div class="card js-goto-detail">
+            <div class="slot-title">
+              <div class="card-code num">W26-0815</div>
+              <div class="card-name">女士高腰阔腿裤</div>
+            </div>
+            <div class="slot-subtitle">裤装 / 长裤 · 2026 秋冬 · 杭州云裳服饰</div>
+            <div class="slot-divider"></div>
+            <div class="slot-attributes">
+              <div class="attr-row"><span class="attr-label">成本价</span><span class="attr-sep">:</span><span class="attr-value money num">¥158.00</span></div>
+              <div class="attr-row"><span class="attr-label">吊牌价</span><span class="attr-sep">:</span><span class="attr-value money num">¥499.00</span></div>
+              <div class="attr-row"><span class="attr-label">上市日期</span><span class="attr-sep">:</span><span class="attr-value num">2026-09-10</span></div>
+            </div>
+            <div class="slot-footer">
+              <span class="badge success">已上市</span>
+              <span class="gross num">68.3%</span>
+            </div>
+          </div>
+
+          <!-- 卡片 4 -->
+          <div class="card js-goto-detail">
+            <div class="slot-title">
+              <div class="card-code num">W26-0816</div>
+              <div class="card-name">儿童加绒保暖卫衣</div>
+            </div>
+            <div class="slot-subtitle">童装 / 上装 · 2026 秋冬 · 广州童趣纺织</div>
+            <div class="slot-divider"></div>
+            <div class="slot-attributes">
+              <div class="attr-row"><span class="attr-label">成本价</span><span class="attr-sep">:</span><span class="attr-value money num">¥96.00</span></div>
+              <div class="attr-row"><span class="attr-label">吊牌价</span><span class="attr-sep">:</span><span class="attr-value money num">¥299.00</span></div>
+              <div class="attr-row"><span class="attr-label">上市日期</span><span class="attr-sep">:</span><span class="attr-value num">2026-08-30</span></div>
+            </div>
+            <div class="slot-footer">
+              <span class="badge gray">已下架</span>
+              <span class="gross num">67.9%</span>
+            </div>
+          </div>
+
+          <!-- 卡片 5 -->
+          <div class="card js-goto-detail">
+            <div class="slot-title">
+              <div class="card-code num">W26-0817</div>
+              <div class="card-name">男士羊毛圆领针织衫</div>
+            </div>
+            <div class="slot-subtitle">针织 / 毛衣 · 2026 秋冬 · 无锡恒隆纺织</div>
+            <div class="slot-divider"></div>
+            <div class="slot-attributes">
+              <div class="attr-row"><span class="attr-label">成本价</span><span class="attr-sep">:</span><span class="attr-value money num">¥188.00</span></div>
+              <div class="attr-row"><span class="attr-label">吊牌价</span><span class="attr-sep">:</span><span class="attr-value money num">¥599.00</span></div>
+              <div class="attr-row"><span class="attr-label">上市日期</span><span class="attr-sep">:</span><span class="attr-value num">2026-10-01</span></div>
+            </div>
+            <div class="slot-footer">
+              <span class="badge warning">待上市</span>
+              <span class="gross num">68.6%</span>
+            </div>
+          </div>
+
+          <!-- 卡片 6 -->
+          <div class="card js-goto-detail">
+            <div class="slot-title">
+              <div class="card-code num">W26-0818</div>
+              <div class="card-name">女士真丝印花方巾</div>
+            </div>
+            <div class="slot-subtitle">配饰 / 围巾 · 2026 春夏 · 苏州丝绸工坊</div>
+            <div class="slot-divider"></div>
+            <div class="slot-attributes">
+              <div class="attr-row"><span class="attr-label">成本价</span><span class="attr-sep">:</span><span class="attr-value money num">¥72.00</span></div>
+              <div class="attr-row"><span class="attr-label">吊牌价</span><span class="attr-sep">:</span><span class="attr-value money num">¥259.00</span></div>
+              <div class="attr-row"><span class="attr-label">上市日期</span><span class="attr-sep">:</span><span class="attr-value num">2026-03-15</span></div>
+            </div>
+            <div class="slot-footer">
+              <span class="badge success">已上市</span>
+              <span class="gross num">72.2%</span>
+            </div>
+          </div>
+
+          <!-- 卡片 7 -->
+          <div class="card js-goto-detail">
+            <div class="slot-title">
+              <div class="card-code num">W26-0819</div>
+              <div class="card-name">女士轻薄短款羽绒服</div>
+            </div>
+            <div class="slot-subtitle">外套 / 羽绒 · 2026 秋冬 · 常熟羽绒制品</div>
+            <div class="slot-divider"></div>
+            <div class="slot-attributes">
+              <div class="attr-row"><span class="attr-label">成本价</span><span class="attr-sep">:</span><span class="attr-value money num">¥268.00</span></div>
+              <div class="attr-row"><span class="attr-label">吊牌价</span><span class="attr-sep">:</span><span class="attr-value money num">¥799.00</span></div>
+              <div class="attr-row"><span class="attr-label">上市日期</span><span class="attr-sep">:</span><span class="attr-value num">2026-09-20</span></div>
+            </div>
+            <div class="slot-footer">
+              <span class="badge success">已上市</span>
+              <span class="gross num">66.5%</span>
+            </div>
+          </div>
+
+          <!-- 卡片 8 -->
+          <div class="card js-goto-detail">
+            <div class="slot-title">
+              <div class="card-code num">W26-0820</div>
+              <div class="card-name">男士休闲直筒牛仔裤</div>
+            </div>
+            <div class="slot-subtitle">裤装 / 牛仔 · 2026 秋冬 · 江阴牛仔制造</div>
+            <div class="slot-divider"></div>
+            <div class="slot-attributes">
+              <div class="attr-row"><span class="attr-label">成本价</span><span class="attr-sep">:</span><span class="attr-value money num">¥132.00</span></div>
+              <div class="attr-row"><span class="attr-label">吊牌价</span><span class="attr-sep">:</span><span class="attr-value money num">¥399.00</span></div>
+              <div class="attr-row"><span class="attr-label">上市日期</span><span class="attr-sep">:</span><span class="attr-value num">2026-08-15</span></div>
+            </div>
+            <div class="slot-footer">
+              <span class="badge gray">已下架</span>
+              <span class="gross num">66.9%</span>
+            </div>
+          </div>
+
+          <!-- 骨架卡 × 2（增量加载） -->
+          <div class="card skeleton">
+            <div class="sk-gap">
+              <div class="sk-line w40"></div>
+              <div class="sk-line w70"></div>
+              <div class="sk-line w90"></div>
+              <div class="sk-line w55"></div>
+              <div class="sk-badge"></div>
+            </div>
+          </div>
+          <div class="card skeleton">
+            <div class="sk-gap">
+              <div class="sk-line w40"></div>
+              <div class="sk-line w90"></div>
+              <div class="sk-line w70"></div>
+              <div class="sk-line w55"></div>
+              <div class="sk-badge"></div>
+            </div>
+          </div>
+
+          <div class="loading-more"><span class="spinner"></span>加载中…　已加载 8 / 1,248 条</div>
+        </div>
+      </div>
+
+      <!-- 悬浮预览气泡（全局共享；真 hover + 150ms 延迟触发，JS 追加到被 hover 的卡片内） -->
+      <div class="card-preview" id="sharedPreview">
+        <div class="pv-head">
+          <span class="avatar">王</span>
+          <div>
+            <div class="pv-name">王敏</div>
+            <div class="pv-role">商品档案负责人</div>
+          </div>
+        </div>
+        <div class="pv-rows">
+          <div class="pv-row"><span class="pv-label">面料成分</span><span class="pv-val">70% 羊毛 30% 聚酯纤维</span></div>
+          <div class="pv-row"><span class="pv-label">工艺</span><span class="pv-val">双面呢手工锁边</span></div>
+          <div class="pv-row"><span class="pv-label">产地</span><span class="pv-val">江苏无锡</span></div>
+          <div class="pv-row"><span class="pv-label">克重</span><span class="pv-val num">480 g/m²</span></div>
+        </div>
+        <div class="pv-tip">悬浮预览（P1）· 单击卡片查看完整档案</div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- S2 · 详情抽屉 · A4 文档分页预览                                -->
+    <!-- ============================================================ -->
+    <section class="screen" id="s2">
+      <div class="s2-wrap">
+        <!-- 背景卡片墙（抽屉打开时被覆盖） -->
+        <div class="s2-bg">
+          <div class="view-toolbar">
+            <span class="vt-title">商品档案 · 卡片视图</span>
+            <span class="vt-count">共 1,248 条</span>
+            <input class="input vt-search" type="text" placeholder="搜索记录…">
+            <span class="spacer"></span>
+            <div class="vt-actions">
+              <button class="btn icon" title="刷新"><svg><use href="#i-refresh"/></svg></button>
+              <button class="btn icon" title="排版配置"><svg><use href="#i-settings"/></svg></button>
+            </div>
+          </div>
+          <div class="card-region">
+            <div class="card-grid">
+              <div class="card" data-open-drawer>
+                <div class="slot-title"><div class="card-code num">W26-0813</div><div class="card-name">女士羊毛混纺大衣</div></div>
+                <div class="slot-subtitle">外套 / 大衣 · 2026 秋冬 · 无锡恒隆纺织</div>
+                <div class="slot-divider"></div>
+                <div class="slot-attributes">
+                  <div class="attr-row"><span class="attr-label">成本价</span><span class="attr-sep">:</span><span class="attr-value money num">¥286.00</span></div>
+                  <div class="attr-row"><span class="attr-label">吊牌价</span><span class="attr-sep">:</span><span class="attr-value money num">¥899.00</span></div>
+                </div>
+                <div class="slot-footer"><span class="badge success">已上市</span><span class="gross num">68.2%</span></div>
+              </div>
+              <div class="card" data-open-drawer>
+                <div class="slot-title"><div class="card-code num">W26-0814</div><div class="card-name">男士商务休闲西装</div></div>
+                <div class="slot-subtitle">外套 / 西装 · 2026 秋冬 · 苏州锦华制衣</div>
+                <div class="slot-divider"></div>
+                <div class="slot-attributes">
+                  <div class="attr-row"><span class="attr-label">成本价</span><span class="attr-sep">:</span><span class="attr-value money num">¥420.00</span></div>
+                  <div class="attr-row"><span class="attr-label">吊牌价</span><span class="attr-sep">:</span><span class="attr-value money num">¥1,299.00</span></div>
+                </div>
+                <div class="slot-footer"><span class="badge warning">待上市</span><span class="gross num">67.7%</span></div>
+              </div>
+              <div class="card" data-open-drawer>
+                <div class="slot-title"><div class="card-code num">W26-0815</div><div class="card-name">女士高腰阔腿裤</div></div>
+                <div class="slot-subtitle">裤装 / 长裤 · 2026 秋冬 · 杭州云裳服饰</div>
+                <div class="slot-divider"></div>
+                <div class="slot-attributes">
+                  <div class="attr-row"><span class="attr-label">成本价</span><span class="attr-sep">:</span><span class="attr-value money num">¥158.00</span></div>
+                  <div class="attr-row"><span class="attr-label">吊牌价</span><span class="attr-sep">:</span><span class="attr-value money num">¥499.00</span></div>
+                </div>
+                <div class="slot-footer"><span class="badge success">已上市</span><span class="gross num">68.3%</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 详情抽屉 -->
+        <aside class="drawer is-open" id="detailDrawer">
+          <!-- 可拖拽调宽把手 -->
+          <div class="resize-handle" title="拖拽调整抽屉宽度"><span class="grip"><i></i><i></i><i></i></span></div>
+
+          <!-- 抽屉工具条 -->
+          <div class="drawer-bar">
+            <span class="drawer-title">W26-0813 女士羊毛混纺大衣<small>· 商品档案</small></span>
+            <span class="spacer"></span>
+            <div class="drawer-actions">
+              <div class="zoom-group">
+                <button id="zoomOut" title="缩小">−</button>
+                <span class="zoom-label num" id="zoomLabel">95%</span>
+                <button id="zoomIn" title="放大">＋</button>
+              </div>
+              <button class="btn sm" id="fitBtn" title="按容器宽度自适应">适应宽度</button>
+              <button class="btn icon" id="drawerFullBtn" title="全屏展开"><svg><use href="#i-expand"/></svg></button>
+              <button class="btn icon" id="drawerPrintBtn" data-toast="打印预览：复用已分页 DOM 调用浏览器打印（原型演示，不真正打印）" title="打印"><svg><use href="#i-print"/></svg></button>
+              <button class="btn icon" data-close-drawer title="关闭"><svg><use href="#i-close"/></svg></button>
+            </div>
+          </div>
+
+          <!-- 文档画布 -->
+          <div class="doc-canvas" id="docCanvas">
+            <div class="doc-pages">
+
+              <!-- 第 1 页 -->
+              <div class="doc-page-wrap">
+                <div class="doc-page" id="docPage1">
+                  <div class="doc-header">商品档案 · 生成于 2026-09-20</div>
+
+                  <h1 class="doc-h1">W26-0813 女士羊毛混纺大衣</h1>
+                  <hr class="doc-divider">
+
+                  <!-- 键值网格（keyValueGrid，2 列，6 项） -->
+                  <div class="kv-grid">
+                    <div class="kv-item"><span class="kv-k">品类</span><span class="kv-c">:</span><span class="kv-v">外套 / 大衣</span></div>
+                    <div class="kv-item"><span class="kv-k">季节</span><span class="kv-c">:</span><span class="kv-v">2026 秋冬</span></div>
+                    <div class="kv-item"><span class="kv-k">供应商</span><span class="kv-c">:</span><span class="kv-v">无锡恒隆纺织</span></div>
+                    <div class="kv-item"><span class="kv-k">成本价</span><span class="kv-c">:</span><span class="kv-v num">¥286.00</span></div>
+                    <div class="kv-item"><span class="kv-k">吊牌价</span><span class="kv-c">:</span><span class="kv-v num">¥899.00</span></div>
+                    <div class="kv-item"><span class="kv-k">上市日期</span><span class="kv-c">:</span><span class="kv-v num">2026-09-18</span></div>
+                  </div>
+
+                  <h2 class="doc-h2">详细信息</h2>
+
+                  <!-- 字段清单（fieldList，单列 8 项） -->
+                  <div class="field-list">
+                    <div class="fl-item"><span class="fl-k">面料成分</span><span class="fl-v">70% 羊毛 30% 聚酯纤维</span></div>
+                    <div class="fl-item"><span class="fl-k">克重</span><span class="fl-v num">480 g/m²</span></div>
+                    <div class="fl-item"><span class="fl-k">尺码范围</span><span class="fl-v">S / M / L / XL</span></div>
+                    <div class="fl-item"><span class="fl-k">颜色</span><span class="fl-v">焦糖棕、深灰</span></div>
+                    <div class="fl-item"><span class="fl-k">工艺</span><span class="fl-v">双面呢手工锁边</span></div>
+                    <div class="fl-item"><span class="fl-k">产地</span><span class="fl-v">江苏无锡</span></div>
+                    <div class="fl-item"><span class="fl-k">执行标准</span><span class="fl-v num">GB/T 2665-2017</span></div>
+                    <div class="fl-item"><span class="fl-k">备注</span><span class="fl-v">首批 320 件，重点陈列款，含可拆卸腰带。</span></div>
+                  </div>
+
+                  <!-- 分页位置示意 -->
+                  <div class="page-break-hint"><span>分页</span></div>
+
+                  <div class="doc-footer">创建人 王敏 · 创建于 2026-08-12 14:30 · rec9aBcXyz</div>
+                  <div class="doc-pageno num">1 / 2</div>
+                </div>
+              </div>
+
+              <!-- 第 2 页 -->
+              <div class="doc-page-wrap">
+                <div class="doc-page" id="docPage2">
+                  <div class="doc-header">商品档案 · 生成于 2026-09-20</div>
+
+                  <h2 class="doc-h2" style="margin-top:0">物料清单
+                    <span style="font-size:12px;color:var(--text-3);font-weight:400">（续 · 跨页重复表头）</span>
+                  </h2>
+
+                  <!-- 表格（table）：表头跨页重复并标注「（续）」 -->
+                  <table class="doc-table">
+                    <thead>
+                      <tr>
+                        <th>物料名称<span class="cont">（续）</span></th>
+                        <th>规格</th>
+                        <th class="num">单耗</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td>主面料（羊毛混纺）</td><td>150cm 幅宽</td><td class="num">2.10 m</td></tr>
+                      <tr><td>里布（聚酯纤维）</td><td>145cm 幅宽</td><td class="num">1.85 m</td></tr>
+                      <tr><td>纽扣（树脂）</td><td>20mm 焦糖棕</td><td class="num">6 粒</td></tr>
+                      <tr><td>拉链</td><td>YKK 3# 金属</td><td class="num">1 条</td></tr>
+                    </tbody>
+                  </table>
+
+                  <!-- 图片块占位 -->
+                  <div class="img-block">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                      <rect x="3" y="4" width="18" height="16" rx="2"/>
+                      <circle cx="8.5" cy="9.5" r="1.6"/>
+                      <path d="M4 17l4.5-4 3.5 3 3-2.5L20 17"/>
+                    </svg>
+                    <span>附件图片（16:9 占位）</span>
+                  </div>
+
+                  <div class="doc-footer">创建人 王敏 · 创建于 2026-08-12 14:30 · rec9aBcXyz</div>
+                  <div class="doc-pageno num">2 / 2</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- 吸顶页码指示器（相对抽屉固定，不随画布滚动） -->
+          <div class="page-indicator">
+            <span>第</span><span class="pi-cur num">1</span><span>/ 共 2 页</span>
+            <button title="上一页">↑</button>
+            <button title="下一页">↓</button>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- S3 · 配置态 · 卡片排版编辑器（三栏）                          -->
+    <!-- ============================================================ -->
+    <section class="screen" id="s3">
+      <div class="editor">
+        <div class="editor-bar">
+          <div class="segmented">
+            <button class="active">卡片排版</button>
+            <button>文档排版</button>
+          </div>
+          <span class="spacer"></span>
+          <button class="btn text">取消</button>
+          <button class="btn primary" id="saveBtn">保存</button>
+        </div>
+
+        <div class="editor-columns">
+          <!-- 左：字段池 -->
+          <div class="pane pane-left">
+            <div class="pane-head">
+              字段池（可拖拽）
+              <input class="input search" type="text" placeholder="搜索字段…">
+            </div>
+            <div class="group-title">已使用</div>
+            <div class="pool-item"><span class="fi">Aa</span>商品名称<span class="drag-dots">⋮⋮</span><span class="used">已用</span></div>
+            <div class="pool-item"><span class="fi">#</span>款号<span class="drag-dots">⋮⋮</span><span class="used">已用</span></div>
+            <div class="pool-item"><span class="fi">Aa</span>品类<span class="drag-dots">⋮⋮</span><span class="used">已用</span></div>
+            <div class="pool-item"><span class="fi">◫</span>季节<span class="drag-dots">⋮⋮</span><span class="used">已用</span></div>
+            <div class="pool-item"><span class="fi">Aa</span>供应商<span class="drag-dots">⋮⋮</span><span class="used">已用</span></div>
+            <div class="pool-item"><span class="fi">#</span>成本价<span class="drag-dots">⋮⋮</span><span class="used">已用</span></div>
+            <div class="pool-item"><span class="fi">#</span>吊牌价<span class="drag-dots">⋮⋮</span><span class="used">已用</span></div>
+            <div class="pool-item"><span class="fi">◫</span>上市日期<span class="drag-dots">⋮⋮</span><span class="used">已用</span></div>
+            <div class="pool-item"><span class="fi">☑</span>状态<span class="drag-dots">⋮⋮</span><span class="used">已用</span></div>
+            <div class="group-title">未使用</div>
+            <div class="pool-item"><span class="fi">Aa</span>负责人<span class="drag-dots">⋮⋮</span></div>
+            <div class="pool-item"><span class="fi">#</span>毛利率<span class="drag-dots">⋮⋮</span></div>
+            <div class="pool-item"><span class="fi">Aa</span>面料成分<span class="drag-dots">⋮⋮</span></div>
+            <div class="pool-item"><span class="fi">#</span>克重<span class="drag-dots">⋮⋮</span></div>
+            <div class="pool-item"><span class="fi">☑</span>颜色<span class="drag-dots">⋮⋮</span></div>
+            <div class="pool-item"><span class="fi">Aa</span>产地<span class="drag-dots">⋮⋮</span></div>
+          </div>
+
+          <!-- 中：预览样例卡 -->
+          <div class="pane pane-center">
+            <div class="center-hint">拖拽字段到卡片槽位 · 实时预览（样例记录：W26-0813）</div>
+            <div class="preview-card-wrap" id="s3Preview">
+              <div class="card editing">
+                <div class="slot-outline" data-slot="标题区">
+                  <div class="slot-title">
+                    <div class="card-code num">W26-0813</div>
+                    <div class="card-name">女士羊毛混纺大衣</div>
+                  </div>
+                </div>
+                <div class="slot-outline" data-slot="副标题区">
+                  <div class="slot-subtitle">外套 / 大衣 · 2026 秋冬 · 无锡恒隆纺织</div>
+                </div>
+                <div class="slot-outline slot-drop" data-slot="属性区" id="attrSlot">
+                  <div class="slot-attributes">
+                    <div class="attr-row"><span class="attr-label">成本价</span><span class="attr-sep">:</span><span class="attr-value money num">¥286.00</span></div>
+                    <div class="insert-line"></div>
+                    <div class="attr-row"><span class="attr-label">吊牌价</span><span class="attr-sep">:</span><span class="attr-value money num">¥899.00</span></div>
+                    <div class="attr-row"><span class="attr-label">上市日期</span><span class="attr-sep">:</span><span class="attr-value num">2026-09-18</span></div>
+                  </div>
+                </div>
+                <div class="slot-outline" data-slot="底部区">
+                  <div class="slot-footer">
+                    <span class="badge success">已上市</span>
+                    <span class="gross num">68.2%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 拖拽幽灵 -->
+            <div class="drag-ghost" style="left:190px;top:150px;">☰ 毛利率</div>
+
+            <div class="editor-actions-row">
+              <button class="btn" data-toggle-drag>模拟拖拽中</button>
+              <span style="font-size:12px;color:var(--text-3)">点击切换「正在拖拽」状态，演示落位高亮 + 插入指示线</span>
+            </div>
+            <div class="editor-note">
+              编辑态下卡片区交互降级为「预览」：<b>禁用点击卡片展开详情</b>（避免与拖拽冲突）。<br>
+              <span style="color:var(--primary)">编辑态：点击卡片不会打开详情</span>
+            </div>
+          </div>
+
+          <!-- 右：槽位配置手风琴 -->
+          <div class="pane pane-right">
+            <div class="accordion open">
+              <div class="acc-head"><span class="caret">▶</span>槽位配置</div>
+              <div class="acc-body">
+                <div class="field-line"><span>标题区</span><span class="tag-inline">2 项</span></div>
+                <div class="field-line"><span>副标题区</span><span class="tag-inline">3 项</span></div>
+                <div class="field-line" style="border-color:var(--primary)"><span>属性区</span><span class="tag-inline">3 项</span></div>
+                <div style="padding:0 0 8px 10px">
+                  <div class="field-line"><span class="grip2">⋮⋮</span>成本价<span class="x">✕</span></div>
+                  <div class="field-line"><span class="grip2">⋮⋮</span>吊牌价<span class="x">✕</span></div>
+                  <div class="field-line"><span class="grip2">⋮⋮</span>上市日期<span class="x">✕</span></div>
+                </div>
+                <div class="field-line"><span>底部区</span><span class="tag-inline">2 项</span></div>
+              </div>
+            </div>
+
+            <div class="accordion">
+              <div class="acc-head"><span class="caret">▶</span>卡片模板</div>
+              <div class="acc-body">
+                <div class="tpl-grid">
+                  <div class="tpl-item active"><div class="tpl-thumb"><i class="w60"></i><i class="w80"></i><i class="w45"></i></div>standard</div>
+                  <div class="tpl-item"><div class="tpl-thumb"><i class="w80"></i><i class="w45"></i></div>compact</div>
+                  <div class="tpl-item"><div class="tpl-thumb" style="background:#E4E9F2"></div>cover</div>
+                  <div class="tpl-item"><div class="tpl-thumb"><i class="w80"></i><i class="w80"></i><i class="w60"></i></div>list</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="accordion">
+              <div class="acc-head"><span class="caret">▶</span>主题与密度</div>
+              <div class="acc-body">
+                <div class="form-row"><label>尺寸密度</label>
+                  <div class="mini-seg"><button>宽松</button><button class="active">标准</button><button>紧凑</button></div>
+                </div>
+                <div class="form-row"><label>卡片主色</label><span class="chip" style="background:var(--primary-light);color:var(--primary);border-color:#C9DAFF">#3370FF</span></div>
+                <div class="form-row"><label>显示分隔线</label><span class="switch on"></span></div>
+              </div>
+            </div>
+
+            <div class="accordion">
+              <div class="acc-head"><span class="caret">▶</span>条件高亮</div>
+              <div class="acc-body">
+                <div class="field-line"><span class="badge warning">待上市</span>卡片左边框 #FF8800<span class="x">✕</span></div>
+                <div class="field-line"><span class="badge error">毛利率 &lt; 60%</span>卡片边框 #F54A45<span class="x">✕</span></div>
+                <button class="btn sm" style="margin-top:4px">+ 新增规则</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- S4 · 配置态 · 文档排版编辑器（三栏）                          -->
+    <!-- ============================================================ -->
+    <section class="screen" id="s4">
+      <div class="editor">
+        <div class="editor-bar">
+          <div class="segmented">
+            <button>卡片排版</button>
+            <button class="active">文档排版</button>
+          </div>
+          <span class="spacer"></span>
+          <button class="btn text">取消</button>
+          <button class="btn primary">保存</button>
+        </div>
+
+        <div class="editor-columns">
+          <!-- 左：区块库（12 项 / 5 组） -->
+          <div class="pane pane-left">
+            <div class="pane-head">
+              区块库（拖入文档流）
+              <input class="input search" type="text" placeholder="搜索区块…">
+            </div>
+            <div class="block-groups">
+              <div class="group-title">文本</div>
+              <div class="pool-item"><span class="fi">H</span>heading 标题<span class="drag-dots">⋮⋮</span></div>
+              <div class="pool-item"><span class="fi">¶</span>paragraph 段落<span class="drag-dots">⋮⋮</span></div>
+              <div class="pool-item"><span class="fi">＊</span>richText 富文本说明<span class="drag-dots">⋮⋮</span></div>
+              <div class="group-title">字段</div>
+              <div class="pool-item"><span class="fi">▦</span>keyValueGrid 键值网格<span class="drag-dots">⋮⋮</span></div>
+              <div class="pool-item"><span class="fi">☰</span>fieldList 字段清单<span class="drag-dots">⋮⋮</span></div>
+              <div class="pool-item"><span class="fi">☑</span>badgeRow 标签行<span class="drag-dots">⋮⋮</span></div>
+              <div class="group-title">媒体</div>
+              <div class="pool-item"><span class="fi">▧</span>image 图片<span class="drag-dots">⋮⋮</span></div>
+              <div class="pool-item"><span class="fi">▤</span>table 表格<span class="drag-dots">⋮⋮</span></div>
+              <div class="group-title">结构</div>
+              <div class="pool-item"><span class="fi">—</span>divider 分隔线<span class="drag-dots">⋮⋮</span></div>
+              <div class="pool-item"><span class="fi">↕</span>spacer 间距<span class="drag-dots">⋮⋮</span></div>
+              <div class="pool-item"><span class="fi">⤓</span>pageBreak 分页<span class="drag-dots">⋮⋮</span></div>
+              <div class="group-title">元信息</div>
+              <div class="pool-item"><span class="fi">ⓘ</span>metaFooter 元信息<span class="drag-dots">⋮⋮</span></div>
+            </div>
+          </div>
+
+          <!-- 中：A4 画布（编辑态） -->
+          <div class="pane pane-center">
+            <div class="canvas-toolbar">
+              <span>A4 纵向 · 794 × 1123 px @96dpi</span>
+              <span style="color:var(--text-3)">|</span>
+              <span>适应宽度 62%</span>
+              <span class="spacer" style="flex:1"></span>
+              <span class="chip on">显示分页边界</span>
+            </div>
+            <div class="canvas-stage">
+              <div class="a4-canvas">
+                <div class="page-margin-guide"></div>
+
+                <div class="doc-block" data-block="heading">
+                  <span class="blk-tag">heading 标题 · L1</span>
+                  <span class="blk-actions"><span>⋮⋮</span><span>✕</span></span>
+                  <h1 class="doc-h1" style="margin-top:0">W26-0813 女士羊毛混纺大衣</h1>
+                </div>
+
+                <div class="doc-block" data-block="divider">
+                  <span class="blk-tag">divider 分隔线</span>
+                  <span class="blk-actions"><span>⋮⋮</span><span>✕</span></span>
+                  <hr class="doc-divider" style="margin:6px 0">
+                </div>
+
+                <div class="doc-block is-selected" data-block="keyValueGrid">
+                  <span class="blk-tag">keyValueGrid 键值网格</span>
+                  <span class="blk-actions"><span>⋮⋮</span><span>✕</span></span>
+                  <span class="handle-dot tl"></span><span class="handle-dot tr"></span>
+                  <span class="handle-dot bl"></span><span class="handle-dot br"></span>
+                  <div class="kv-grid">
+                    <div class="kv-item"><span class="kv-k">品类</span><span class="kv-c">:</span><span class="kv-v">外套 / 大衣</span></div>
+                    <div class="kv-item"><span class="kv-k">季节</span><span class="kv-c">:</span><span class="kv-v">2026 秋冬</span></div>
+                    <div class="kv-item"><span class="kv-k">供应商</span><span class="kv-c">:</span><span class="kv-v">无锡恒隆纺织</span></div>
+                    <div class="kv-item"><span class="kv-k">成本价</span><span class="kv-c">:</span><span class="kv-v num">¥286.00</span></div>
+                    <div class="kv-item"><span class="kv-k">吊牌价</span><span class="kv-c">:</span><span class="kv-v num">¥899.00</span></div>
+                    <div class="kv-item"><span class="kv-k">上市日期</span><span class="kv-c">:</span><span class="kv-v num">2026-09-18</span></div>
+                  </div>
+                </div>
+
+                <div class="doc-block" data-block="spacer">
+                  <span class="blk-tag">spacer 间距 · 12px</span>
+                  <span class="blk-actions"><span>⋮⋮</span><span>✕</span></span>
+                  <div style="height:12px"></div>
+                </div>
+
+                <div class="doc-block" data-block="heading2">
+                  <span class="blk-tag">heading 标题 · L2</span>
+                  <span class="blk-actions"><span>⋮⋮</span><span>✕</span></span>
+                  <h2 class="doc-h2" style="margin-top:6px">详细信息</h2>
+                </div>
+
+                <div class="doc-block" data-block="fieldList">
+                  <span class="blk-tag">fieldList 字段清单</span>
+                  <span class="blk-actions"><span>⋮⋮</span><span>✕</span></span>
+                  <div class="field-list">
+                    <div class="fl-item"><span class="fl-k">面料成分</span><span class="fl-v">70% 羊毛 30% 聚酯纤维</span></div>
+                    <div class="fl-item"><span class="fl-k">克重</span><span class="fl-v num">480 g/m²</span></div>
+                    <div class="fl-item"><span class="fl-k">尺码范围</span><span class="fl-v">S / M / L / XL</span></div>
+                    <div class="fl-item"><span class="fl-k">颜色</span><span class="fl-v">焦糖棕、深灰</span></div>
+                  </div>
+                </div>
+
+                <!-- 分页边界标尺 -->
+                <div class="paginate-ruler" style="top:760px"><span class="lbl">分页边界</span></div>
+
+                <div class="drop-zone">拖入此处（在此新建区块）</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 右：区块属性 / 页设置 / 文档主题 -->
+          <div class="pane pane-right w320">
+            <div class="accordion open">
+              <div class="acc-head"><span class="caret">▶</span>区块属性 · keyValueGrid</div>
+              <div class="acc-body">
+                <div class="form-row"><label>列数</label>
+                  <div class="mini-seg"><button>1</button><button class="active">2</button><button>3</button></div>
+                </div>
+                <div class="form-row"><label>标签列宽 (px)</label><input class="input" value="76"></div>
+                <div class="form-col">
+                  <label>显示字段（多选）</label>
+                  <div class="multi-list">
+                    <label><span class="chk on">✓</span>品类</label>
+                    <label><span class="chk on">✓</span>季节</label>
+                    <label><span class="chk on">✓</span>供应商</label>
+                    <label><span class="chk on">✓</span>成本价</label>
+                    <label><span class="chk on">✓</span>吊牌价</label>
+                    <label><span class="chk on">✓</span>上市日期</label>
+                    <label><span class="chk"></span>负责人</label>
+                  </div>
+                </div>
+                <div class="form-row"><label>边框样式</label>
+                  <select class="input" style="width:130px"><option>无边框</option><option>全框线</option><option>仅横线</option></select>
+                </div>
+                <div class="form-row"><label>字号 (px)</label><input class="input" value="14"></div>
+              </div>
+            </div>
+
+            <div class="accordion">
+              <div class="acc-head"><span class="caret">▶</span>页设置</div>
+              <div class="acc-body">
+                <div class="form-row"><label>纸张</label>
+                  <div class="mini-seg"><button class="active">A4</button><button>A5</button><button>Letter</button></div>
+                </div>
+                <div class="form-row"><label>方向</label>
+                  <div class="mini-seg"><button class="active">纵向</button><button>横向</button></div>
+                </div>
+                <div class="form-col">
+                  <label>页边距 (mm)</label>
+                  <div style="display:flex;gap:8px">
+                    <input class="input" style="width:100%" value="上 15" title="上">
+                    <input class="input" style="width:100%" value="右 17" title="右">
+                  </div>
+                  <div style="display:flex;gap:8px;margin-top:8px">
+                    <input class="input" style="width:100%" value="下 15" title="下">
+                    <input class="input" style="width:100%" value="左 17" title="左">
+                  </div>
+                </div>
+                <div class="form-row"><label>页眉</label><span class="switch on"></span></div>
+                <div class="form-row"><label>页眉内容</label><input class="input" value="商品档案 · 生成于 {今天}"></div>
+                <div class="form-row"><label>页脚</label><span class="switch on"></span></div>
+                <div class="form-row"><label>页码格式</label>
+                  <select class="input" style="width:130px"><option>n / n总</option><option>n</option><option>第 n 页</option></select>
+                </div>
+              </div>
+            </div>
+
+            <div class="accordion">
+              <div class="acc-head"><span class="caret">▶</span>文档主题</div>
+              <div class="acc-body">
+                <div class="form-row"><label>字体</label>
+                  <select class="input" style="width:150px"><option>PingFang SC</option><option>Microsoft YaHei</option><option>SimSun</option></select>
+                </div>
+                <div class="form-row"><label>基准字号 (px)</label><input class="input" value="14"></div>
+                <div class="form-row"><label>行高</label><input class="input" value="1.6"></div>
+                <div class="form-row"><label>首行缩进 (px)</label><input class="input" value="0"></div>
+                <div class="form-row"><label>主色</label><span class="chip" style="background:var(--primary-light);color:var(--primary);border-color:#C9DAFF">#3370FF</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- S5 · 空态 / 异常态集（10 个小场景）                            -->
+    <!-- ============================================================ -->
+    <section class="screen" id="s5">
+      <div class="screen-head">
+        <h2>S5 · 空态 / 异常态集</h2>
+        <p>十个关键状态并排展示，文案与设计文档 §12「错误处理与降级」一一对应。</p>
+      </div>
+      <div class="screen-body">
+        <div class="state-grid">
+
+          <!-- 1 无记录 -->
+          <div class="state-panel">
+            <div class="state-name"><span class="idx">1</span>无记录｜空态</div>
+            <div class="state-center">
+              <div class="illus">
+                <svg width="40" height="34" viewBox="0 0 40 34" fill="none" stroke="currentColor" stroke-width="1.6">
+                  <rect x="4" y="6" width="32" height="22" rx="3"/><path d="M4 13h32M11 20h12"/>
+                </svg>
+              </div>
+              <div style="font-size:13px;font-weight:500">该视图暂无记录</div>
+              <div class="empty-actions"><button class="btn sm">检查筛选条件</button><button class="btn sm primary">新增记录</button></div>
+            </div>
+          </div>
+
+          <!-- 2 首屏加载中 -->
+          <div class="state-panel">
+            <div class="state-name"><span class="idx">2</span>首屏加载中｜骨架卡</div>
+            <div class="state-demo">
+              <div class="mini-card"><div class="mc-top"><div class="sk-line w40" style="width:70px"></div><div class="sk-badge"></div></div><div class="sk-line w90"></div><div class="sk-line w55"></div></div>
+              <div class="mini-card"><div class="mc-top"><div class="sk-line w40" style="width:70px"></div><div class="sk-badge"></div></div><div class="sk-line w70"></div><div class="sk-line w55"></div></div>
+              <div class="mini-card"><div class="mc-top"><div class="sk-line w40" style="width:70px"></div><div class="sk-badge"></div></div><div class="sk-line w90"></div><div class="sk-line w70"></div></div>
+            </div>
+          </div>
+
+          <!-- 3 加载失败 -->
+          <div class="state-panel">
+            <div class="state-name"><span class="idx">3</span>加载失败</div>
+            <div class="state-center">
+              <div class="illus" style="background:linear-gradient(135deg,#FDEDEC,#FFF6F5);border-color:#F3C2C0;color:#E08A85">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M12 3l9 16H3z"/><path d="M12 9v5M12 16.5v.5"/>
+                </svg>
+              </div>
+              <div style="font-size:13px;font-weight:500">数据加载失败，请重试</div>
+              <div class="err-code">错误码 500 · 已自动重试 1 次</div>
+              <button class="btn sm primary">重试</button>
+            </div>
+          </div>
+
+          <!-- 4 配置损坏 -->
+          <div class="state-panel">
+            <div class="state-name"><span class="idx">4</span>配置损坏 → 已回退默认版式</div>
+            <div class="state-demo">
+              <div class="alert-bar warning">
+                <span class="ic">⚠</span>
+                <span>配置已损坏，已为你恢复默认模板</span>
+                <span class="alert-spacer"></span>
+                <span class="x">✕</span>
+              </div>
+              <div class="mini-card"><div class="sk-line w70"></div><div class="sk-line w90"></div><div class="sk-line w55"></div></div>
+            </div>
+          </div>
+
+          <!-- 5 存储降级 -->
+          <div class="state-panel">
+            <div class="state-name"><span class="idx">5</span>存储降级</div>
+            <div class="state-demo">
+              <div class="alert-bar warning">
+                <span class="ic">⚠</span>
+                <span>配置仅本地保存，其他成员看不到你的排版</span>
+              </div>
+              <div class="mini-card"><div class="sk-line w90"></div><div class="sk-line w70"></div></div>
+            </div>
+          </div>
+
+          <!-- 6 复制视图首开提示 -->
+          <div class="state-panel">
+            <div class="state-name"><span class="idx">6</span>复制视图首开提示</div>
+            <div class="state-demo">
+              <div class="alert-bar info">
+                <span class="ic">ⓘ</span>
+                <div style="flex:1">
+                  <div>本视图由其他视图复制而来，排版需重新配置</div>
+                  <div class="alert-actions">
+                    <button class="btn sm">从模板重配</button>
+                    <button class="btn sm primary">立即配置</button>
+                  </div>
+                </div>
+                <span class="x">✕</span>
+              </div>
+              <div class="mini-card"><div class="sk-line w70"></div><div class="sk-line w90"></div></div>
+            </div>
+          </div>
+
+          <!-- 7 字段被删除 -->
+          <div class="state-panel">
+            <div class="state-name"><span class="idx">7</span>字段被删除（编辑态）</div>
+            <div class="state-demo">
+              <div style="font-size:12px;color:var(--text-3)">槽位配置 · 属性区</div>
+              <div class="field-line"><span class="grip2">⋮⋮</span>成本价<span class="x">✕</span></div>
+              <div class="stale-field">
+                <span class="grip2" style="color:var(--text-disabled)">⋮⋮</span>
+                <span>供应商</span>
+                <span class="badge error">字段已删除</span>
+                <span class="x" style="margin-left:auto">✕</span>
+              </div>
+              <div style="font-size:11px;color:var(--text-3)">已失效引用将被自动隐藏，请重新配置</div>
+            </div>
+          </div>
+
+          <!-- 8 字段类型不支持 -->
+          <div class="state-panel">
+            <div class="state-name"><span class="idx">8</span>字段类型不支持</div>
+            <div class="state-demo">
+              <div class="mini-card">
+                <div class="slot-title"><div class="card-code num">W26-0813</div><div class="card-name">女士羊毛混纺大衣</div></div>
+                <div class="attr-row" style="display:flex;align-items:baseline;font-size:13px">
+                  <span class="attr-label" style="flex:0 0 64px;color:var(--text-3)">附件图纸</span>
+                  <span class="attr-sep" style="color:var(--text-3);margin-right:6px">:</span>
+                  <span class="unsupported-badge">不支持的字段类型</span>
+                </div>
+              </div>
+              <div class="tip-bubble">该字段类型暂不支持在卡片中展示，已降级为兜底占位。</div>
+            </div>
+          </div>
+
+          <!-- 9 分页失败降级 -->
+          <div class="state-panel">
+            <div class="state-name"><span class="idx">9</span>分页失败 → 单页长文档降级</div>
+            <div class="state-demo">
+              <div class="alert-bar warning"><span class="ic">⚠</span><span>分页失败，已切换为单页长文档模式</span></div>
+              <div style="background:#fff;border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;color:var(--text-2);line-height:1.7">
+                <div style="font-size:14px;font-weight:600;color:var(--text-1);margin-bottom:6px">W26-0813 女士羊毛混纺大衣</div>
+                <div>连续流式渲染，不模拟纸张与分页边界，保证内容可读…</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 10 配置体积超限 -->
+          <div class="state-panel">
+            <div class="state-name"><span class="idx">10</span>配置体积超限</div>
+            <div class="state-demo">
+              <div class="alert-bar error">
+                <span class="ic">✕</span>
+                <div style="flex:1">
+                  <div>排版配置过大（&gt;64KB），请精简区块或高亮规则</div>
+                  <div class="alert-actions"><button class="btn sm">知道了</button></div>
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--text-3)">保存前拦截 · 不写入视图级存储</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- S6 · 设计规范页                                              -->
+    <!-- ============================================================ -->
+    <section class="screen" id="s6">
+      <div class="screen-head">
+        <h2>S6 · 设计规范</h2>
+        <p>全部色值 / 字阶 / 间距 / 圆角 / 阴影 / 组件均取自同一套 token（见 styles.css 的 <code>:root</code>）。</p>
+      </div>
+      <div class="screen-body">
+
+        <!-- 色板 -->
+        <div class="spec-section">
+          <h3>色板</h3>
+          <p class="spec-desc">主色 / 语义色 / 中性色阶</p>
+          <div class="swatch-grid">
+            <div class="swatch"><div class="chip-color" style="background:#3370FF"></div><div class="meta"><div class="nm">主色 Primary</div><div class="hex">#3370FF</div></div></div>
+            <div class="swatch"><div class="chip-color" style="background:#4E83FD"></div><div class="meta"><div class="nm">主色 Hover</div><div class="hex">#4E83FD</div></div></div>
+            <div class="swatch"><div class="chip-color" style="background:#245BDB"></div><div class="meta"><div class="nm">主色 Active</div><div class="hex">#245BDB</div></div></div>
+            <div class="swatch"><div class="chip-color" style="background:#EFF4FF"></div><div class="meta"><div class="nm">主色浅底</div><div class="hex">#EFF4FF</div></div></div>
+            <div class="swatch"><div class="chip-color" style="background:#34C724"></div><div class="meta"><div class="nm">成功 Success</div><div class="hex">#34C724</div></div></div>
+            <div class="swatch"><div class="chip-color" style="background:#FF8800"></div><div class="meta"><div class="nm">警告 Warning</div><div class="hex">#FF8800</div></div></div>
+            <div class="swatch"><div class="chip-color" style="background:#F54A45"></div><div class="meta"><div class="nm">错误 Error</div><div class="hex">#F54A45</div></div></div>
+            <div class="swatch"><div class="chip-color" style="background:#1F2329"></div><div class="meta"><div class="nm">文本 Text-1</div><div class="hex">#1F2329</div></div></div>
+            <div class="swatch"><div class="chip-color" style="background:#646A73"></div><div class="meta"><div class="nm">文本 Text-2</div><div class="hex">#646A73</div></div></div>
+            <div class="swatch"><div class="chip-color" style="background:#8F959E"></div><div class="meta"><div class="nm">文本 Text-3</div><div class="hex">#8F959E</div></div></div>
+            <div class="swatch"><div class="chip-color" style="background:#DEE0E3"></div><div class="meta"><div class="nm">边框 Border</div><div class="hex">#DEE0E3</div></div></div>
+            <div class="swatch"><div class="chip-color" style="background:#F5F6F7"></div><div class="meta"><div class="nm">页面底 BG-page</div><div class="hex">#F5F6F7</div></div></div>
+            <div class="swatch"><div class="chip-color" style="background:#EBEDF0"></div><div class="meta"><div class="nm">文档画布</div><div class="hex">#EBEDF0</div></div></div>
+            <div class="swatch"><div class="chip-color" style="background:#FFFFFF;border-bottom:1px solid #E5E6EB"></div><div class="meta"><div class="nm">面板/纸面</div><div class="hex">#FFFFFF</div></div></div>
+          </div>
+        </div>
+
+        <!-- 字阶 -->
+        <div class="spec-section">
+          <h3>字阶</h3>
+          <p class="spec-desc">字体族："PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui</p>
+          <div class="type-row"><span class="t-meta">11px · 辅助/标注</span><span style="font-size:11px">辅助说明文字 11px</span></div>
+          <div class="type-row"><span class="t-meta">12px · 次要/徽标</span><span style="font-size:12px">次要信息与徽标 12px</span></div>
+          <div class="type-row"><span class="t-meta">13px · 属性/副标题</span><span style="font-size:13px">卡片副标题与属性 13px</span></div>
+          <div class="type-row"><span class="t-meta">14px · 正文（默认）</span><span style="font-size:14px">正文默认字号 14px</span></div>
+          <div class="type-row"><span class="t-meta">16px · 小标题</span><span style="font-size:16px">区块小标题 16px</span></div>
+          <div class="type-row"><span class="t-meta">20px · 页面标题</span><span style="font-size:20px">页面标题 20px</span></div>
+          <div class="type-row"><span class="t-meta">22px · 文档 H1</span><span style="font-size:22px;font-weight:700">文档 H1 22px</span></div>
+          <div class="type-row"><span class="t-meta">28px · 强调</span><span style="font-size:28px;font-weight:700">强调 28px</span></div>
+        </div>
+
+        <!-- 间距 -->
+        <div class="spec-section">
+          <h3>间距（4 的倍数）</h3>
+          <div class="spacing-row">
+            <div class="spacing-item"><div class="bar" style="width:4px;height:24px"></div>4</div>
+            <div class="spacing-item"><div class="bar" style="width:8px;height:24px"></div>8</div>
+            <div class="spacing-item"><div class="bar" style="width:12px;height:24px"></div>12</div>
+            <div class="spacing-item"><div class="bar" style="width:16px;height:24px"></div>16</div>
+            <div class="spacing-item"><div class="bar" style="width:24px;height:24px"></div>24</div>
+            <div class="spacing-item"><div class="bar" style="width:32px;height:24px"></div>32</div>
+            <div class="spacing-item" style="margin-left:16px">卡片间距 16 · 卡片区 padding 16 · 工具栏高 48 · 纸页间距 24</div>
+          </div>
+        </div>
+
+        <!-- 圆角 -->
+        <div class="spec-section">
+          <h3>圆角</h3>
+          <div class="radius-row">
+            <div class="radius-item"><div class="box" style="border-radius:8px"></div>卡片 8px</div>
+            <div class="radius-item"><div class="box" style="border-radius:6px"></div>按钮/输入 6px</div>
+            <div class="radius-item"><div class="box" style="border-radius:4px"></div>标签徽标 4px</div>
+            <div class="radius-item"><div class="box" style="border-radius:2px"></div>纸页 2px</div>
+          </div>
+        </div>
+
+        <!-- 阴影 -->
+        <div class="spec-section">
+          <h3>阴影（三级）</h3>
+          <div class="shadow-row">
+            <div class="shadow-item"><div class="box" style="box-shadow:0 1px 2px rgba(31,35,41,.06)"></div>卡片静置</div>
+            <div class="shadow-item"><div class="box" style="box-shadow:0 4px 12px rgba(31,35,41,.10)"></div>卡片 hover</div>
+            <div class="shadow-item"><div class="box" style="box-shadow:0 1px 3px rgba(31,35,41,.12)"></div>纸页</div>
+            <div class="shadow-item"><div class="box" style="box-shadow:-4px 0 16px rgba(31,35,41,.08)"></div>抽屉</div>
+          </div>
+        </div>
+
+        <!-- 组件清单 -->
+        <div class="spec-section">
+          <h3>组件清单</h3>
+          <p class="spec-desc">按钮 / 输入框 / 徽标 / 提示条</p>
+
+          <div class="component-block">
+            <div class="cb-title">按钮</div>
+            <div class="component-row">
+              <button class="btn primary">主按钮</button>
+              <button class="btn">次按钮</button>
+              <button class="btn text">文字按钮</button>
+              <button class="btn primary" style="background:#4E83FD;border-color:#4E83FD">主按钮 hover</button>
+              <button class="btn" disabled>禁用按钮</button>
+              <button class="btn icon"><svg><use href="#i-settings"/></svg></button>
+            </div>
+          </div>
+
+          <div class="component-block">
+            <div class="cb-title">输入框</div>
+            <div class="component-row">
+              <input class="input" placeholder="默认状态" style="width:180px">
+              <input class="input is-focus" value="聚焦状态" style="width:180px">
+              <input class="input is-error" value="错误状态" style="width:180px">
+            </div>
+          </div>
+
+          <div class="component-block">
+            <div class="cb-title">标签徽标</div>
+            <div class="component-row">
+              <span class="badge success">已上市</span>
+              <span class="badge warning">待上市</span>
+              <span class="badge error">已下架（异常）</span>
+              <span class="badge info">信息</span>
+              <span class="badge gray">已下架</span>
+            </div>
+          </div>
+
+          <div class="component-block">
+            <div class="cb-title">提示条</div>
+            <div style="display:flex;flex-direction:column;gap:8px;max-width:640px">
+              <div class="alert-bar info"><span class="ic">ⓘ</span><span>信息提示条</span></div>
+              <div class="alert-bar success"><span class="ic">✓</span><span>成功提示条</span></div>
+              <div class="alert-bar warning"><span class="ic">⚠</span><span>警告提示条：配置仅本地保存</span></div>
+              <div class="alert-bar error"><span class="ic">✕</span><span>错误提示条：排版配置过大</span></div>
+            </div>
+          </div>
+
+          <div class="component-block">
+            <div class="cb-title">卡片 / 骨架 / 空态</div>
+            <div class="component-row" style="align-items:stretch">
+              <div class="card" style="width:280px">
+                <div class="slot-title"><div class="card-code num">W26-0813</div><div class="card-name">女士羊毛混纺大衣</div></div>
+                <div class="slot-subtitle">外套 / 大衣 · 2026 秋冬</div>
+                <div class="slot-footer"><span class="badge success">已上市</span><span class="gross num">68.2%</span></div>
+              </div>
+              <div class="card skeleton" style="width:280px">
+                <div class="sk-gap"><div class="sk-line w40"></div><div class="sk-line w90"></div><div class="sk-line w70"></div><div class="sk-badge"></div></div>
+              </div>
+              <div style="width:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:1px dashed var(--border);border-radius:8px;padding:16px">
+                <div class="illus" style="width:64px;height:48px"></div>
+                <div style="font-size:12px;color:var(--text-3)">空态占位</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 交互演示                                                      -->
+    <!-- ============================================================ -->
+    <section class="screen" id="demo">
+      <div class="screen-head">
+        <h2>交互演示 · 主流程分步走查</h2>
+        <p>点击下方任一步骤，右侧舞台会切换到对应屏幕并高亮关键元素。</p>
+      </div>
+      <div class="demo-wrap">
+        <div class="demo-steps">
+          <button class="demo-step" data-demo-screen="s1" data-demo-target="cardGrid"><span class="sidx">1</span>浏览卡片墙（S1）</button>
+          <button class="demo-step" data-demo-screen="s2" data-demo-drawer="open" data-demo-target="detailDrawer"><span class="sidx">2</span>点第 3 张卡 → 详情抽屉（S2）</button>
+          <button class="demo-step" data-demo-screen="s2" data-demo-drawer="open" data-demo-target="docCanvas"><span class="sidx">3</span>查看 A4 文档分页预览（S2）</button>
+          <button class="demo-step" data-demo-screen="s2" data-demo-drawer="open" data-demo-target="zoomIn"><span class="sidx">4</span>缩放 → 150%</button>
+          <button class="demo-step" data-demo-screen="s2" data-demo-drawer="open" data-demo-target="docPage2"><span class="sidx">5</span>翻到第 2 页（跨页重复表头）</button>
+          <button class="demo-step" data-demo-screen="s2" data-demo-drawer="open" data-demo-target="drawerPrintBtn"><span class="sidx">6</span>打印预览提示</button>
+          <button class="demo-step" data-demo-screen="s3" data-demo-target="s3Preview"><span class="sidx">7</span>进入配置态 · 卡片排版（S3）</button>
+          <button class="demo-step" data-demo-screen="s3" data-demo-drag="on" data-demo-target="attrSlot"><span class="sidx">8</span>拖字段到属性区（插入指示线）</button>
+          <button class="demo-step" data-demo-screen="s3" data-demo-target="saveBtn"><span class="sidx">9</span>保存配置</button>
+        </div>
+
+        <div class="demo-info">
+          <h3>主流程说明</h3>
+          <p>本演示串起产品最核心的一条链路：<b>浏览卡片 → 打开 A4 文档详情 → 调整预览 → 进入配置态排版 → 保存</b>。</p>
+          <ol>
+            <li>浏览态：卡片墙按四槽位渲染，含 hover 悬浮预览气泡与增量加载骨架卡。</li>
+            <li>详情：右侧 860px 抽屉内的 Word 式 A4 分页文档（本产品核心卖点）。</li>
+            <li>缩放与翻页：0.5~1.5 倍缩放、「适应宽度」、吸顶页码指示器。</li>
+            <li>配置态：卡片排版 / 文档排版双模式三栏编辑器，拖拽落位 + 插入指示线。</li>
+            <li>保存：写入视图级配置（原型仅演示交互，不含持久化）。</li>
+          </ol>
+          <p style="margin-top:12px;color:var(--text-3);font-size:12px">提示：演示仅切换原型屏幕，不会修改任何真实数据。</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- 全局轻提示 -->
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

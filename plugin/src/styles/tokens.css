@@ -1,0 +1,96 @@
+/**
+ * Design Tokens —— 唯一数值来源：`04-UI设计说明.md` §3。
+ * 任何组件都不得硬编码数值；通过 Tailwind 映射或 var(--token) 取值。
+ * 若与原型冲突，以本文件（及 04 文档 §3）为准。
+ */
+:root {
+  /* ===== 3.1 颜色 · 品牌与中性 ===== */
+  --color-primary: #3370ff;
+  --color-primary-hover: #4e83fd;
+  --color-primary-active: #245bdb;
+  --color-primary-light: #eff4ff;
+  --color-text-1: #1f2329;
+  --color-text-2: #646a73;
+  --color-text-3: #8f959e;
+  --color-text-disabled: #bbbfc4;
+  --color-border: #dee0e3;
+  --color-divider: #e5e6eb;
+  --color-bg-app: #f5f6f7;
+  --color-bg-panel: #ffffff;
+  --color-bg-canvas: #ebedf0;
+
+  /* ===== 3.2 颜色 · 语义 ===== */
+  --color-success: #34c724;
+  --color-success-light: #e8f8e6;
+  --color-warning: #ff8800;
+  --color-warning-light: #fff4e6;
+  --color-error: #f54a45;
+  --color-error-light: #feeceb;
+  --color-info: #3370ff;
+  --color-info-light: #eff4ff;
+
+  /* ===== 3.3 字体与字阶 ===== */
+  --font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-size-11: 11px;
+  --font-size-12: 12px;
+  --font-size-13: 13px;
+  --font-size-14: 14px;
+  --font-size-16: 16px;
+  --font-size-20: 20px;
+  --font-size-22: 22px;
+  --font-size-28: 28px;
+  --font-size-card-title: 15px;
+  --line-height-base: 1.6;
+  --line-height-tight: 1.35;
+  --line-height-doc-heading: 1.4;
+
+  /* ===== 3.4 间距与栅格 ===== */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --layout-toolbar-height: 48px;
+  --layout-grid-padding: 16px;
+  --layout-card-min-width: 280px;
+  --layout-card-gap: 16px;
+  --layout-panel-left: 220px;
+  --layout-panel-right-card: 300px;
+  --layout-panel-right-doc: 320px;
+  --layout-drawer-default: 860px;
+  --layout-page-gap-v: 24px;
+
+  /* ===== 3.5 圆角 ===== */
+  --radius-card: 8px;
+  --radius-control: 6px;
+  --radius-tag: 4px;
+  --radius-paper: 2px;
+  --radius-pill: 999px;
+
+  /* ===== 3.6 阴影 ===== */
+  --shadow-card-rest: 0 1px 2px rgba(31, 35, 41, 0.06);
+  --shadow-card-hover: 0 4px 12px rgba(31, 35, 41, 0.1);
+  --shadow-drawer: -4px 0 16px rgba(31, 35, 41, 0.08);
+  --shadow-paper: 0 1px 3px rgba(31, 35, 41, 0.12);
+  --shadow-popover: 0 4px 12px rgba(31, 35, 41, 0.1);
+  --shadow-drag-ghost: 0 8px 20px rgba(31, 35, 41, 0.16);
+
+  /* ===== 3.7 动效 ===== */
+  --motion-duration-drawer-in: 250ms;
+  --motion-duration-drawer-out: 200ms;
+  --motion-duration-hover-in: 150ms;
+  --motion-duration-hover-out: 200ms;
+  --motion-duration-press: 100ms;
+  --motion-duration-banner: 200ms;
+  --motion-duration-focus: 120ms;
+  --motion-duration-skeleton: 1400ms;
+  --motion-ease-standard: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --motion-ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --motion-ease-in: cubic-bezier(0.4, 0, 1, 1);
+
+  /* 卡片网格列宽推导（3.4）：(viewportW − 2×pad + gap) / (minWidth + gap) */
+  --grid-card-min-width: var(--layout-card-min-width);
+}

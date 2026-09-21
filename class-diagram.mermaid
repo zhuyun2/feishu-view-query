@@ -1,0 +1,265 @@
+%% 卡片视图核心类图
+%% 说明：配置模型（数据类）+ 服务类（ConfigRepository / RecordDataSource / 渲染器注册表）
+
+classDiagram
+    class CardViewConfig {
+        +number schemaVersion
+        +ConfigMeta meta
+        +LayoutConfig layout
+        +StyleTheme theme
+        +DensityConfig density
+        +HighlightRule[] highlightRules
+        +DetailConfig detail
+    }
+
+    class ConfigEnvelope {
+        +number schemaVersion
+        +string pluginVersion
+        +number writtenAt
+        +string checksum
+        +CardViewConfig payload
+    }
+
+    class ConfigMeta {
+        +string configId
+        +string tableId
+        +number createdAt
+        +number updatedAt
+        +string updatedBy
+        +string templateId
+    }
+
+    class LayoutConfig {
+        +string templateId
+        +SlotConfigMap slots
+        +string cardAspect
+    }
+
+    class SlotConfig {
+        +SlotId id
+        +boolean visible
+        +boolean collapsibleWhenEmpty
+        +string direction
+        +string separator
+        +number maxItemsPerCard
+    }
+
+    class FieldPlacement {
+        +string placementId
+        +string fieldId
+        +SlotId slot
+        +number order
+        +string label
+        +boolean labelVisible
+        +FieldDisplayOptions display
+    }
+
+    class FieldDisplayOptions {
+        +number maxLines
+        +string truncate
+        +number maxItems
+        +string prefix
+        +string suffix
+        +NumberFormatOptions numberFormat
+        +string dateFormat
+        +boolean hideWhenEmpty
+    }
+
+    class NumberFormatOptions {
+        +boolean useGrouping
+        +number decimals
+        +string unit
+    }
+
+    class StyleTheme {
+        +string preset
+        +string primaryColor
+        +string backgroundColor
+        +string borderColor
+        +number borderRadius
+        +number shadowLevel
+        +number fontScale
+        +number titleWeight
+    }
+
+    class DensityConfig {
+        +number cardMinWidth
+        +string columnsMode
+        +number fixedColumns
+        +number gap
+        +number padding
+        +number maxCardHeight
+    }
+
+    class HighlightRule {
+        +string ruleId
+        +string name
+        +boolean enabled
+        +HighlightTarget target
+        +RuleCondition condition
+        +HighlightStyle style
+        +number priority
+    }
+
+    class RuleCondition {
+        +string logic
+        +RuleExpr[] items
+    }
+
+    class RuleExpr {
+        +string fieldId
+        +RuleOperator operator
+        +any value
+    }
+
+    class HighlightStyle {
+        +string color
+        +string backgroundColor
+        +string borderColor
+        +number borderWidth
+    }
+
+    class DetailConfig {
+        +string fieldScope
+        +string[] customFieldIds
+        +string layout
+        +DetailSection[] sections
+    }
+
+    class DetailSection {
+        +string sectionId
+        +string title
+        +string[] fieldIds
+    }
+
+    class FieldRenderDescriptor {
+        +FieldTypeValue fieldType
+        +string priority
+        +string rendererKey
+        +boolean cardCapable
+        +boolean detailCapable
+        +string fallback
+        +normalize(value, meta) NormalizedValue
+    }
+
+    class NormalizedValue {
+        +string kind
+        +string text
+        +string display
+        +any raw
+    }
+
+    class FieldMetaLite {
+        +string id
+        +string name
+        +number type
+        +Record property
+    }
+
+    class ConfigRepository {
+        <<interface>>
+        +getSchemaVersion() number
+        +load(viewId) LoadResult
+        +save(viewId, config) SaveResult
+        +subscribe(viewId, cb) Function
+        +remove(viewId) boolean
+    }
+
+    class BridgeConfigRepository {
+        +getData(key) any
+        +setData(key, data) boolean
+        +onDataChange(cb) void
+    }
+
+    class LocalStorageConfigRepository {
+        +getItem(key) string
+        +setItem(key, value) void
+    }
+
+    class RecordDataSource {
+        <<interface>>
+        +loadPage(query) PageResult
+        +loadRecord(recordId) IRecord
+    }
+
+    class SdkRecordDataSource {
+        +getRecordsByPage(params) IGetRecordsByPageResponse
+    }
+
+    class RecordCache {
+        +get(recordId) IRecord
+        +set(recordId, record) void
+        +getPage(pageToken) IRecord[]
+        +putPage(pageToken, records) void
+    }
+
+    class FieldRendererRegistry {
+        +registerRenderer(type, renderer) void
+        +getRenderer(type) FieldRenderer
+    }
+
+    class FieldRenderer {
+        <<interface>>
+        +string key
+        +string priority
+        +renderCard(nv, ctx) ReactNode
+        +renderDetail(nv, ctx) ReactNode
+    }
+
+    class ViewStore {
+        +CardViewConfig config
+        +FieldMetaLite[] fields
+        +boolean canEdit
+        +hydrateConfig(config) void
+    }
+
+    class DraftStore {
+        +CardViewConfig draft
+        +CardViewConfig[] snapshots
+        +boolean dirty
+        +applyPlacement(p) void
+        +commit() void
+        +rollback() void
+    }
+
+    class UiStore {
+        +boolean editorOpen
+        +boolean detailOpen
+        +boolean hoverOpen
+        +string activeRecordId
+    }
+
+    CardViewConfig "1" *-- "1" ConfigMeta
+    CardViewConfig "1" *-- "1" LayoutConfig
+    CardViewConfig "1" *-- "1" StyleTheme
+    CardViewConfig "1" *-- "1" DensityConfig
+    CardViewConfig "1" *-- "*" HighlightRule
+    CardViewConfig "1" *-- "1" DetailConfig
+    ConfigEnvelope "1" *-- "1" CardViewConfig
+
+    LayoutConfig "1" *-- "*" SlotConfig
+    FieldPlacement "1" *-- "1" FieldDisplayOptions
+    FieldPlacement ..> SlotConfig : slot 引用
+    FieldDisplayOptions "1" *-- "0..1" NumberFormatOptions
+
+    HighlightRule "1" *-- "1" RuleCondition
+    HighlightRule "1" *-- "1" HighlightStyle
+    RuleCondition "1" *-- "*" RuleExpr
+
+    DetailConfig "1" *-- "*" DetailSection
+
+    FieldRenderDescriptor ..> NormalizedValue : produces
+    FieldRenderDescriptor ..> FieldMetaLite : reads
+
+    ConfigRepository <|.. BridgeConfigRepository
+    ConfigRepository <|.. LocalStorageConfigRepository
+
+    RecordDataSource <|.. SdkRecordDataSource
+    SdkRecordDataSource ..> RecordCache : uses
+
+    FieldRendererRegistry "1" o-- "*" FieldRenderer
+
+    ViewStore ..> ConfigRepository : loads
+    ViewStore ..> RecordDataSource : reads
+    DraftStore ..> ViewStore : edits copy
+    CardViewConfig "1" ..> "1" FieldRenderDescriptor : referenced by fields

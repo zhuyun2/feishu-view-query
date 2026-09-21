@@ -1,0 +1,23 @@
+# 构建期生成的产物 —— 不要提交
+#
+# 背景：官方 @lark-opdev/block-bitable-webpack-utils 在【上一级目录】读 ../app.json、
+# 在【当前目录】读 block.json（对应 opdev create ${app-dir}/${view-dir} 的约定）。
+# 本项目为保持 plugin/ 自包含，由 plugin/webpack.config.js 在构建前把
+# plugin/app.json（唯一致力来源）同步到本目录的 app.json。
+#
+# 因此：plugin/app.json 是源文件（要提交），本目录的 app.json 是构建产物（不提交）。
+# 修改 appId 请改 plugin/app.json，改完跑一次 npm run build 即会自动同步。
+/app.json
+
+# ---------------------------------------------------------------------------
+# 调试 / 验证过程中的临时产物 —— 不提交（**不删除**，仅忽略）
+#
+# 背景：M1/M2 期间工程师与 QA 为留证产生了大量 `_*.txt` 诊断日志、npm 缓存目录
+# 与一次性 node_modules 备份目录。用户已明确拒绝批量删除操作，故此处仅做
+# git 忽略，保持仓库干净；如需清理请由用户手动执行。
+#
+# 不含斜杠的模式在 gitignore 中匹配任意层级。
+# ---------------------------------------------------------------------------
+_*.txt
+_npmcache/
+node_modules_trash_*/
