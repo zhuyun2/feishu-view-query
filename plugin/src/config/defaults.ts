@@ -31,6 +31,7 @@ import {
 } from './types';
 import { FieldType, isP0FieldType } from '@/fields/fieldTypes';
 import type { FieldMetaLite } from '@/fields/fieldTypes';
+import { defaultFilterConfig } from '@/filter/sanitize';
 import {
   DEFAULT_GRID_FIELD_COUNT,
   DEFAULT_KEY_VALUE_COLUMNS,
@@ -272,6 +273,9 @@ export function defaultDetailConfig(fields: readonly FieldMetaLite[] = []): Deta
   };
 }
 
+/** 空筛选配置（= 不筛）实现位于 `filter/sanitize.ts`（§22.6）；此处透出供配置层使用 */
+export { defaultFilterConfig };
+
 /** 默认样式主题 */
 export function defaultTheme(): StyleTheme {
   return {
@@ -326,6 +330,7 @@ export function createDefaultConfig(params: {
     theme: defaultTheme(),
     density: defaultDensity(),
     highlightRules: [],
+    filter: defaultFilterConfig(),
   };
 }
 

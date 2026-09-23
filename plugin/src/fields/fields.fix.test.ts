@@ -10,7 +10,7 @@ import type { FieldDisplayOptions } from '@/config/types';
 import { FieldType } from './fieldTypes';
 import type { DocRenderContext, FieldMetaLite, RenderContext } from './fieldTypes';
 import { normalize } from './normalize';
-import { renderCard, renderDoc } from './registry';
+import { renderCard, renderDoc, getRenderer } from './registry';
 
 const theme = defaultTheme();
 const display: FieldDisplayOptions = {
@@ -89,5 +89,53 @@ describe('F4 回归 · 非标量输入不得被强转为 0（应为 empty）', (
     expect(normalize(3, ratingMeta)).toMatchObject({ kind: 'rating', number: 3 });
     expect(normalize(50, progressMeta).display).toBe('50%');
     expect(normalize(1_700_000_000_000, dateMeta).kind).toBe('dateTime');
+  });
+});
+
+/* ===================== 批次 A：自动编号渲染 + 文本分段数组端到端 ===================== */
+
+describe('批次A回归 · 自动编号字符串编号按文本渲染（保留前导零/前缀）', () => {
+  const autoNumberMeta: FieldMetaLite = {
+    id: 'f_autonum',
+    name: '自动编号',
+    type: FieldType.AutoNumber,
+    isPrimary: false,
+  };
+
+  it('注册表：AutoNumber → 文本渲染器（不再走数字千分位）', () => {
+    expect(getRenderer(FieldType.AutoNumber).key).toBe('text');
+  });
+
+  it('卡片态：{value:"0008"} 包装 → 渲染为 0008（前导零不丢，不再显示 8）', () => {
+    const nv = normalize({ value: '0008', status: 'Completed' }, autoNumberMeta);
+    expect(html(renderCard(nv, rctx(autoNumberMeta)))).toContain('0008');
+  });
+
+  it('文档态：{value:"F-2024-0001"} → 渲染为 F-2024-0001', () => {
+    const nv = normalize({ value: 'F-2024-0001', status: 'Completed' }, autoNumberMeta);
+    expect(html(renderDoc(nv, dctx(autoNumberMeta)))).toContain('F-2024-0001');
+  });
+});
+
+describe('批次A回归 · 文本分段数组（真机 IOpenSegment[]）双态渲染', () => {
+  const segmentTextMeta: FieldMetaLite = {
+    id: 'f_seg',
+    name: '长度字段测试',
+    type: FieldType.Text,
+    isPrimary: false,
+  };
+
+  it('卡片态：分段数组 → 渲染拼接文本（修复前为空 → 整行被 hideEmptyRows 剔除）', () => {
+    const nv = normalize(
+      [{ type: 'text', text: '长度字段测试：多段' }, { type: 'text', text: '内容' }],
+      segmentTextMeta,
+    );
+    expect(nv.isEmpty).toBe(false);
+    expect(html(renderCard(nv, rctx(segmentTextMeta)))).toContain('长度字段测试：多段内容');
+  });
+
+  it('文档态：分段数组 → 渲染拼接文本', () => {
+    const nv = normalize([{ type: 'text', text: '文档态分段内容' }], segmentTextMeta);
+    expect(html(renderDoc(nv, dctx(segmentTextMeta)))).toContain('文档态分段内容');
   });
 });

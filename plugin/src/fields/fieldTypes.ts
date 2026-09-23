@@ -196,6 +196,14 @@ export interface NormalizedValue {
   boolean?: boolean;
   /** 毫秒时间戳（dateTime / createdTime / modifiedTime） */
   timestamp?: number;
+  /**
+   * 字段**自身**的展示日期格式（已映射为 `formatDate` 方言，如 `YYYY/MM/DD`）。
+   *
+   * 仅当字段自带明确格式时才有值（当前来源：公式字段的
+   * `property.dataType.property.dateFormat`，见 `normalize.normalizeFormulaDate`）。
+   * 普通日期字段不设此值，渲染层继续回退到视图级 `ctx.display.dateFormat`。
+   */
+  dateFormat?: string;
   /** 是否为空（未填） */
   isEmpty: boolean;
 }

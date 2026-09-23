@@ -8,7 +8,7 @@
  * 卡片墙（浏览态）与编辑器预览卡（S3 中栏）**共用**本组件，保证「所见即所得」。
  */
 import { memo } from 'react';
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 import type { CardLayoutConfig, StyleTheme } from '@/config/types';
 import { SlotAttributes } from './SlotAttributes';
 import { SlotFooter } from './SlotFooter';
@@ -18,7 +18,7 @@ import type { FieldsById } from './slotContent';
 import { slotHasContent } from './slotContent';
 
 export interface CardBodyProps {
-  record: IRecord;
+  record: SdkRecord;
   layout: CardLayoutConfig;
   fieldsById: FieldsById;
   theme: StyleTheme;

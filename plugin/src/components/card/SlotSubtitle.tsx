@@ -3,14 +3,14 @@
  * `direction='column'` 时纵向排列（清单模板）。
  */
 import { memo } from 'react';
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 import type { CardLayoutConfig, StyleTheme } from '@/config/types';
 import type { FieldsById } from './slotContent';
 import { slotHasContent, visiblePlacements } from './slotContent';
 import { FieldValue } from './FieldValue';
 
 export interface SlotSubtitleProps {
-  record: IRecord;
+  record: SdkRecord;
   layout: CardLayoutConfig;
   fieldsById: FieldsById;
   theme: StyleTheme;

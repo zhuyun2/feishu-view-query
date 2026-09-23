@@ -8,6 +8,7 @@
  * 直接拒绝，避免把更高版本客户端写入的配置降级覆盖。
  */
 import { degradedConfigKey } from '@/constants';
+import { formatError } from '@/utils/errorText';
 import {
   refreshReadOnlyFromPayload,
   resolveLoadedConfig,
@@ -84,9 +85,13 @@ export class LocalStorageConfigRepository implements ConfigRepository {
       return {
         config: null,
         degraded: true,
+        // 介质读取失败 ≠ 数据损坏
+        corrupted: false,
+        // 本地存储自身就不可用 → 已无更低一级介质可退，不能说"已回退本地保存"
+        reason: '本地存储读取失败，已使用默认排版，本次修改无法保存。',
         unsupportedNewer: false,
         source: 'localStorage',
-        error: err instanceof Error ? err.message : 'localStorage-read-failed',
+        error: `localStorage-read-failed: ${formatError(err)}`,
       };
     }
   }
@@ -108,7 +113,7 @@ export class LocalStorageConfigRepository implements ConfigRepository {
       return {
         ok: false,
         reason: 'write-failed',
-        error: err instanceof Error ? err.message : 'localStorage-write-failed',
+        error: `localStorage-write-failed: ${formatError(err)}`,
       };
     }
   }

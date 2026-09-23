@@ -1,20 +1,22 @@
 /**
  * 公式字段渲染器（P1）。
  *
- * 公式结果类型不确定：`normalize()` 已把结果**保守解包**为 `number` / `checkbox` / `text`
- * （无法解包则折叠为 `unsupported`）。本渲染器按结果类型**分发**到既有渲染器，
- * 保证「公式与源字段呈现一致」，且绝不输出原始 JSON。
+ * 公式结果类型不确定：`normalize()` 已按公式的 `property.dataType` 把结果
+ * **保守解包**为 `dateTime` / `number` / `checkbox` / `text`（无法解包则折叠为 `unsupported`）。
+ * 本渲染器按结果类型**分发**到既有渲染器，保证「公式与源字段呈现一致」，且绝不输出原始 JSON。
+ *  - 日期结果（`kind:'dateTime'`）→ `DateRenderer`（按公式字段自身的 `dateFormat` 展示）；
  */
 import { docLabelPrefix } from '../fieldTypes';
 import type { DocRenderContext, FieldRenderer, NormalizedValue } from '../fieldTypes';
 import { CheckboxRenderer } from './CheckboxRenderer';
+import { DateRenderer } from './DateRenderer';
 import { NumberRenderer } from './NumberRenderer';
 import { TextRenderer } from './TextRenderer';
 
 function dispatch(nv: NormalizedValue): FieldRenderer {
   if (nv.kind === 'number' || nv.kind === 'currency') return NumberRenderer;
   if (nv.kind === 'checkbox') return CheckboxRenderer;
-  if (nv.kind === 'dateTime') return TextRenderer;
+  if (nv.kind === 'dateTime') return DateRenderer;
   return TextRenderer;
 }
 

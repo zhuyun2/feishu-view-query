@@ -5,7 +5,7 @@
  * 单字段异常（含 `normalize()` 阶段抛错，F3）→ 回落 FallbackRenderer，不影响整卡。
  */
 import { memo, useMemo } from 'react';
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 import type { FieldPlacement, StyleTheme } from '@/config/types';
 import type { FieldMetaLite, NormalizedValue, RenderContext } from '@/fields/fieldTypes';
 import { normalize } from '@/fields/normalize';
@@ -15,7 +15,7 @@ import { logError } from '@/utils/log';
 
 export interface FieldValueProps {
   placement: FieldPlacement;
-  record: IRecord;
+  record: SdkRecord;
   fieldsById: Record<string, FieldMetaLite>;
   theme: StyleTheme;
   locale: string;

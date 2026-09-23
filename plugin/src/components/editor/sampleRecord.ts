@@ -4,7 +4,7 @@
  * 真实记录由用户数据提供，但配置态下不一定有记录；为了让编辑器**始终有卡可看**，
  * 这里按字段类型合成一条**样例记录**（值均为示例，不含任何真实数据 / ID）。
  */
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 import type { FieldMetaLite } from '@/fields/fieldTypes';
 import { FieldType } from '@/fields/fieldTypes';
 
@@ -59,8 +59,8 @@ function sampleValueFor(field: FieldMetaLite): unknown {
 }
 
 /** 依据字段列表合成一条样例记录 */
-export function buildSampleRecord(fields: readonly FieldMetaLite[]): IRecord {
+export function buildSampleRecord(fields: readonly FieldMetaLite[]): SdkRecord {
   const values: Record<string, unknown> = {};
   for (const field of fields) values[field.id] = sampleValueFor(field);
-  return { recordId: SAMPLE_RECORD_ID, fields: values } as unknown as IRecord;
+  return { recordId: SAMPLE_RECORD_ID, fields: values } as unknown as SdkRecord;
 }

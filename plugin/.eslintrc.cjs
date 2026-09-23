@@ -29,5 +29,16 @@ module.exports = {
     'no-console': ['warn', { allow: ['warn', 'error'] }],
     eqeqeq: ['error', 'always'],
   },
-  ignorePatterns: ['dist/', 'node_modules/', '*.config.js', '*.config.ts', '.eslintrc.cjs'],
+  // node_modules_trash_*/ 是一次性 node_modules 备份目录（用户明确拒绝删除），
+  // 其内含旧依赖自带的 .eslintrc（如 deep-eql 引用了不存在的 "strict/es5"），
+  // 会让 `eslint .` 直接报 config 缺失而非 lint 问题。此处仅忽略、不删除。
+  ignorePatterns: [
+    'dist/',
+    'node_modules/',
+    'node_modules_trash_*/',
+    '_npmcache/',
+    '*.config.js',
+    '*.config.ts',
+    '.eslintrc.cjs',
+  ],
 };

@@ -7,8 +7,8 @@
  * ⚠️ 分层：本层是依赖图最底层，**只向下依赖 SDK**，不 import 任何上层模块（config / fields /
  * data），避免反向依赖与运行时环。SDK 类型仅以 `import type` 引用（编译期擦除）。
  */
-import { bitable } from '@lark-base-open/js-sdk';
-import type { IFieldMeta, ITable, IView } from '@lark-base-open/js-sdk';
+import { bitable } from '@lark-opdev/block-bitable-api';
+import type { IFieldMeta, ITable, IView } from '@lark-opdev/block-bitable-api';
 import { logError } from '@/utils/log';
 
 /** 当前表格/视图上下文（`bitable.base.getSelection()` 的瘦身映射） */

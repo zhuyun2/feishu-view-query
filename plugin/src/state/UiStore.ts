@@ -6,6 +6,8 @@
 import { create } from 'zustand';
 import type { DensityConfig } from '@/config/types';
 import { defaultDensity, defaultDrawerConfig } from '@/config/defaults';
+import { defaultFilterConfig } from '@/filter/sanitize';
+import type { FilterConfig } from '@/filter/types';
 import type { EditorMode } from './DraftStore';
 
 /** 悬浮预览锚点（卡片的视口矩形；气泡据此定位并做溢出翻转） */
@@ -54,6 +56,28 @@ export interface UiState {
   /** 工具栏搜索关键词（对**已加载记录**做客户端过滤） */
   searchQuery: string;
 
+  /* ===== §22 字段筛选：运行期状态（草稿态 / 面板 / 覆盖率入口） ===== */
+
+  /**
+   * 当前**草稿态**筛选配置（§22.13 类图 `UiStore --> FilterConfig`）。
+   *
+   * ⚠️ 这是**唯一真相**：无限加载是怎么回事？——
+   * `ViewStore.config.filter` 是持久化的值，`UiStore.filter` 是当前会话在用的值；
+   * 两者**互不为副本**：config 只在 `useCardViewInit` 装载时**一次性**流入 UiStore（§22.6 F3），
+   * 之后一切变更都发生在 UiStore，持久化由上层（F5）显式发起。
+   * 这样避免了「store 里存两份 filter」的典型双真相故障。
+   */
+  filter: FilterConfig;
+  /**
+   * 本地是否已编辑过（§22.10-⑧ 远端同步策略）：
+   * `false` 且面板关闭时，远端配置变更可直接覆盖本地；`true` 则保留本地。
+   */
+  filterTouched: boolean;
+  /** 是否正在执行「加载全部并重新筛选」升级（Plan C-lite，§22.11.3） */
+  filterLoadingAll: boolean;
+  /** 本次升级**开始时**的已加载条数（供进度条显示「起点 → 当前」） */
+  filterLoadAllStartedFrom: number;
+
   openEditor(mode?: EditorMode): void;
   closeEditor(): void;
   setEditMode(mode: EditorMode): void;
@@ -76,6 +100,20 @@ export interface UiState {
   dismissCopyBanner(): void;
   showToast(message: string | null): void;
   setSearchQuery(query: string): void;
+
+  /* ===== §22 字段筛选动作 ===== */
+
+  /** 写入草稿态（用户输入即时生效）；同时置位 `filterTouched` */
+  setFilter(filter: FilterConfig): void;
+  /** 清空条件，回到「不筛」（同样算一次本地编辑） */
+  clearFilter(): void;
+  /** 外部（初始化 / 远端同步）整体替换，**不**置 `filterTouched` */
+  replaceFilter(filter: FilterConfig): void;
+  setFilterTouched(touched: boolean): void;
+  /** 开始「加载全部并重新筛选」升级；`startedFrom` = 起始已加载条数 */
+  beginFilterLoadAll(startedFrom: number): void;
+  /** 结束升级（成功或失败都必须调用，否则 UI 永久停留在进度态） */
+  endFilterLoadAll(): void;
 }
 
 /** 从配置解析抽屉初始状态（容错：缺失字段走默认） */
@@ -117,6 +155,11 @@ export const useUiStore = create<UiState>((set, get) => ({
   copyBannerDismissed: false,
   toast: null,
   searchQuery: '',
+
+  filter: defaultFilterConfig(),
+  filterTouched: false,
+  filterLoadingAll: false,
+  filterLoadAllStartedFrom: 0,
 
   openEditor: (mode = 'card') => set({ editorOpen: true, editMode: mode }),
   closeEditor: () => set({ editorOpen: false }),
@@ -169,4 +212,20 @@ export const useUiStore = create<UiState>((set, get) => ({
   dismissCopyBanner: () => set({ copyBannerDismissed: true }),
   showToast: (message) => set({ toast: message }),
   setSearchQuery: (query) => set({ searchQuery: query }),
+
+  setFilter: (filter) => set({ filter, filterTouched: true }),
+
+  clearFilter: () => set({ filter: defaultFilterConfig(), filterTouched: true }),
+
+  replaceFilter: (filter) => set({ filter, filterTouched: false }),
+
+  setFilterTouched: (touched) => set({ filterTouched: touched === true }),
+
+  beginFilterLoadAll: (startedFrom) =>
+    set({
+      filterLoadingAll: true,
+      filterLoadAllStartedFrom: Number.isFinite(startedFrom) ? Math.max(0, Math.trunc(startedFrom)) : 0,
+    }),
+
+  endFilterLoadAll: () => set({ filterLoadingAll: false }),
 }));

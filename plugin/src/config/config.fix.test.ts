@@ -177,6 +177,95 @@ describe('F5 回归 · 更高版本配置 → 仓储层禁止保存', () => {
   });
 });
 
+describe('真机 E2E 回归 · 错误信息不得丢失 SDK 错误码（formatError 归一化）', () => {
+  it('bridge 读取抛「普通对象」→ error 保留 code 与 msg，而非退回无信息的兜底串', async () => {
+    const store: BridgeStore = {
+      getData: async () => {
+        // 飞书 SDK/开放平台拒绝 Promise 时抛的是普通对象，不是 Error 实例
+        throw { code: 20001, msg: 'permission denied' };
+      },
+      setData: async () => true,
+      onDataChange: () => () => undefined,
+    };
+    const repo = new BridgeConfigRepository(store);
+    const loaded = await repo.load('view_A');
+
+    expect(loaded.error).toBe('bridge-read-failed: code=20001 permission denied');
+    // 判别式：若退回 `err instanceof Error ? err.message : 'bridge-read-failed'` 必然失败
+    expect(loaded.error).not.toBe('bridge-read-failed');
+    expect(loaded.error).not.toContain('[object Object]');
+  });
+
+  it('bridge 读取抛普通对象且已注入 fallback → 降级原因带上 code（而非退回 bridge-degraded）', async () => {
+    const storage = new MemoryStorage();
+    const fallback = new LocalStorageConfigRepository(storage, 'app_test');
+    const store: BridgeStore = {
+      getData: async () => {
+        throw { code: 20002, msg: 'bridge unavailable' };
+      },
+      setData: async () => true,
+      onDataChange: () => () => undefined,
+    };
+    const repo = new BridgeConfigRepository(store, { fallback });
+    const loaded = await repo.load('view_A');
+
+    expect(loaded.degraded).toBe(true);
+    expect(loaded.error).toContain('code=20002');
+    expect(loaded.error).toContain('bridge unavailable');
+    expect(loaded.error).not.toBe('bridge-degraded');
+  });
+
+  it('bridge 写入抛普通对象 → SaveResult.error 保留 code', async () => {
+    const store: BridgeStore = {
+      getData: async () => null,
+      setData: async () => {
+        throw { code: 40001, msg: 'write denied' };
+      },
+      onDataChange: () => () => undefined,
+    };
+    const repo = new BridgeConfigRepository(store);
+    const result = await repo.save('view_A', makeConfig('view_A'));
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('bridge-write-failed: code=40001 write denied');
+    expect(result.error).not.toBe('bridge-write-failed');
+  });
+
+  it('localStorage 读写出错（普通对象）→ error 保留 code', async () => {
+    const readFail: StorageLike = {
+      getItem: () => {
+        throw { code: 30001, msg: 'read blocked' };
+      },
+      setItem: () => {
+        throw { code: 30002, msg: 'quota exceeded' };
+      },
+      removeItem: () => undefined,
+    };
+    const repo = new LocalStorageConfigRepository(readFail, 'app_test');
+
+    const loaded = await repo.load('view_A');
+    expect(loaded.error).toBe('localStorage-read-failed: code=30001 read blocked');
+    expect(loaded.error).not.toBe('localStorage-read-failed');
+
+    const saved = await repo.save('view_A', makeConfig('view_A'));
+    expect(saved.error).toBe('localStorage-write-failed: code=30002 quota exceeded');
+    expect(saved.error).not.toBe('localStorage-write-failed');
+  });
+
+  it('Error 实例仍只取 message，不会多套一层 name（保持既有契约）', async () => {
+    const store: BridgeStore = {
+      getData: async () => {
+        throw new Error('bridge down');
+      },
+      setData: async () => true,
+      onDataChange: () => () => undefined,
+    };
+    const repo = new BridgeConfigRepository(store);
+    const loaded = await repo.load('view_A');
+    expect(loaded.error).toBe('bridge-read-failed: bridge down');
+  });
+});
+
 describe('Q4 回归 · 分隔线线型字段名为 borderStyle', () => {
   it('默认文档模板的分隔线使用 borderStyle，且不含 style', () => {
     const template = defaultDocTemplate([]);

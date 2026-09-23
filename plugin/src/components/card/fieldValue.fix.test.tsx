@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 import { Card } from '@/components/card/Card';
 import { defaultTheme } from '@/config/defaults';
 import type { CardLayoutConfig, FieldPlacement, SlotConfig } from '@/config/types';
@@ -68,7 +68,7 @@ describe('F3 回归 · normalize 抛错时字段级兜底（不崩卡）', () =>
     const record = {
       recordId: 'rec_1',
       fields: { f_text: '正常值', f_sel: evilValue() },
-    } as unknown as IRecord;
+    } as unknown as SdkRecord;
 
     let markup = '';
     expect(() => {

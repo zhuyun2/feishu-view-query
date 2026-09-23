@@ -2,12 +2,12 @@
  * QA 独立复核（M1 / T05）：getRecordsByPage 分页/游标/页大小 clamp/缓存命中；空表与异常不崩。
  */
 import { describe, expect, it, vi } from 'vitest';
-import type { IRecord, ITable } from '@lark-base-open/js-sdk';
+import type { SdkRecord, SdkTable } from '@/sdk/port';
 import { getRecordFields, getRecordId } from './RecordDataSource';
 import { SdkRecordDataSource } from './SdkRecordDataSource';
 
-function rec(id: string, fields: Record<string, unknown> = {}): IRecord {
-  return { recordId: id, fields } as unknown as IRecord;
+function rec(id: string, fields: Record<string, unknown> = {}): SdkRecord {
+  return { recordId: id, fields } as unknown as SdkRecord;
 }
 
 interface PageResponse {
@@ -18,7 +18,7 @@ interface PageResponse {
 
 function dsWith(impl: (params: { viewId: string; pageSize: number; pageToken?: number }) => Promise<PageResponse>) {
   const spy = vi.fn(impl);
-  const table = { getRecordsByPage: spy } as unknown as ITable;
+  const table = { getRecordsByPage: spy } as unknown as SdkTable;
   return { ds: new SdkRecordDataSource(table, 'view_A'), spy };
 }
 
@@ -40,7 +40,7 @@ describe('QA · data/SdkRecordDataSource 分页与缓存（独立复核）', () 
       .fn()
       .mockResolvedValueOnce({ records: [], pageToken: 100, hasMore: true })
       .mockResolvedValueOnce({ records: [], pageToken: undefined, hasMore: false });
-    const table = { getRecordsByPage: spy } as unknown as ITable;
+    const table = { getRecordsByPage: spy } as unknown as SdkTable;
     const ds = new SdkRecordDataSource(table, 'view_A');
 
     const p1 = await ds.loadPage({ viewId: 'view_A', pageSize: 100 });
@@ -108,7 +108,7 @@ describe('QA · data/SdkRecordDataSource 分页与缓存（独立复核）', () 
 
   it('loadRecord：空 id → null 且不发请求', async () => {
     const spy = vi.fn();
-    const table = { getRecordById: spy } as unknown as ITable;
+    const table = { getRecordById: spy } as unknown as SdkTable;
     const ds = new SdkRecordDataSource(table, 'view_A');
     await expect(ds.loadRecord('')).resolves.toBeNull();
     expect(spy).not.toHaveBeenCalled();
@@ -117,7 +117,7 @@ describe('QA · data/SdkRecordDataSource 分页与缓存（独立复核）', () 
 
 describe('QA · data 辅助函数与无字段容错（独立复核）', () => {
   it('getVisibleRecordIds：SDK 抛错 → 返回 []，count() 为 0（不抛未捕获异常）', async () => {
-    const table = { getViewById: vi.fn().mockRejectedValue(new Error('no view')) } as unknown as ITable;
+    const table = { getViewById: vi.fn().mockRejectedValue(new Error('no view')) } as unknown as SdkTable;
     const ds = new SdkRecordDataSource(table, 'view_A');
     await expect(ds.getVisibleRecordIds()).resolves.toEqual([]);
     await expect(ds.count()).resolves.toBe(0);
@@ -125,7 +125,7 @@ describe('QA · data 辅助函数与无字段容错（独立复核）', () => {
 
   it('getVisibleRecordIds：过滤掉非字符串 id', async () => {
     const view = { getVisibleRecordIdList: vi.fn().mockResolvedValue(['a', 1, null, 'b']) };
-    const table = { getViewById: vi.fn().mockResolvedValue(view) } as unknown as ITable;
+    const table = { getViewById: vi.fn().mockResolvedValue(view) } as unknown as SdkTable;
     const ds = new SdkRecordDataSource(table, 'view_A');
     await expect(ds.getVisibleRecordIds()).resolves.toEqual(['a', 'b']);
   });
@@ -133,14 +133,14 @@ describe('QA · data 辅助函数与无字段容错（独立复核）', () => {
   it('getRecordFields：null / 无 fields / fields 非对象 → 均返回 {}', () => {
     expect(getRecordFields(null)).toEqual({});
     expect(getRecordFields(undefined)).toEqual({});
-    expect(getRecordFields({ recordId: 'r' } as unknown as IRecord)).toEqual({});
-    expect(getRecordFields({ recordId: 'r', fields: 123 } as unknown as IRecord)).toEqual({});
-    expect(getRecordFields({ recordId: 'r', fields: { a: 1 } } as unknown as IRecord)).toEqual({ a: 1 });
+    expect(getRecordFields({ recordId: 'r' } as unknown as SdkRecord)).toEqual({});
+    expect(getRecordFields({ recordId: 'r', fields: 123 } as unknown as SdkRecord)).toEqual({});
+    expect(getRecordFields({ recordId: 'r', fields: { a: 1 } } as unknown as SdkRecord)).toEqual({ a: 1 });
   });
 
   it('getRecordId：recordId 优先，回退 id，空记录为空串', () => {
-    expect(getRecordId({ recordId: 'r1' } as unknown as IRecord)).toBe('r1');
-    expect(getRecordId({ id: 'r2' } as unknown as IRecord)).toBe('r2');
+    expect(getRecordId({ recordId: 'r1' } as unknown as SdkRecord)).toBe('r1');
+    expect(getRecordId({ id: 'r2' } as unknown as SdkRecord)).toBe('r2');
     expect(getRecordId(null)).toBe('');
   });
 });

@@ -7,7 +7,7 @@
  *
  * 接口刻意设计为「页 + 游标」形态，允许 M2 接虚拟滚动增量加载（M1 只取首批 1 页）。
  */
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 
 export interface LoadPageQuery {
   /** 传入 viewId 时结果自动遵循该视图的原生筛选与排序（D7） */
@@ -19,7 +19,7 @@ export interface LoadPageQuery {
 }
 
 export interface PageResult {
-  records: IRecord[];
+  records: SdkRecord[];
   /** 下一页游标；null 表示没有更多 */
   pageToken: string | null;
   hasMore: boolean;
@@ -29,7 +29,7 @@ export interface RecordDataSource {
   /** 分页取数（结果按视图原生筛选/排序） */
   loadPage(query: LoadPageQuery): Promise<PageResult>;
   /** 单条记录（走记录级缓存） */
-  loadRecord(recordId: string): Promise<IRecord | null>;
+  loadRecord(recordId: string): Promise<SdkRecord | null>;
   /** 记录总数（基于视图可见记录） */
   count(): Promise<number>;
   /** 视图内有序记录 id（`view.getVisibleRecordIdList()`） */
@@ -38,11 +38,11 @@ export interface RecordDataSource {
   clearCache(): void;
 }
 
-/** 单条记录字段值（`IRecord.fields` 的宽松映射） */
+/** 单条记录字段值（`SdkRecord.fields` 的宽松映射） */
 export type RecordFields = Record<string, unknown>;
 
-/** 从 IRecord 取字段值（容错：fields 可能缺失） */
-export function getRecordFields(record: IRecord | null | undefined): RecordFields {
+/** 从 SdkRecord 取字段值（容错：fields 可能缺失） */
+export function getRecordFields(record: SdkRecord | null | undefined): RecordFields {
   if (!record) return {};
   const raw = record as unknown as { fields?: unknown };
   if (raw.fields && typeof raw.fields === 'object') {
@@ -51,8 +51,8 @@ export function getRecordFields(record: IRecord | null | undefined): RecordField
   return {};
 }
 
-/** 从 IRecord 取 recordId */
-export function getRecordId(record: IRecord | null | undefined): string {
+/** 从 SdkRecord 取 recordId */
+export function getRecordId(record: SdkRecord | null | undefined): string {
   if (!record) return '';
   const raw = record as unknown as { recordId?: unknown; id?: unknown };
   if (typeof raw.recordId === 'string') return raw.recordId;

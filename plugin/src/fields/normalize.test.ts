@@ -114,3 +114,102 @@ describe('fields/normalize（US-5 AC1：永不外泄原始 ID / JSON）', () => 
     expect(normalize({ type: 'text', value: '汇总' }, formulaField).display).toBe('汇总');
   });
 });
+
+/* ===================== 批次 A：真机分段数组（IOpenSegment[]）与自动编号包装 ===================== */
+
+describe('fields/normalize · 批次A：文本分段数组（真机 IOpenSegment[]）解包', () => {
+  const segmentTextField: FieldMetaLite = { id: 'f_seg', name: '长度字段测试', type: FieldType.Text, isPrimary: false };
+  const urlField: FieldMetaLite = { id: 'f_url', name: '链接', type: FieldType.Url, isPrimary: false };
+  const autoNumberField: FieldMetaLite = {
+    id: 'f_autonum',
+    name: '自动编号',
+    type: FieldType.AutoNumber,
+    isPrimary: false,
+  };
+
+  it('多段文本数组 → 拼接各段 text（真机多行文本实际形态）', () => {
+    const raw = [
+      { type: 'text', text: '第一段\n' },
+      { type: 'text', text: '第二段' },
+    ];
+    expect(normalize(raw, segmentTextField)).toMatchObject({
+      kind: 'text',
+      text: '第一段\n第二段',
+      display: '第一段\n第二段',
+      isEmpty: false,
+    });
+  });
+
+  it('混合 text / url / mention 段 → 只拼有 text 的段，不泄漏 token / id', () => {
+    const raw = [
+      { type: 'text', text: '请联系 ' },
+      { type: 'mention', mentionType: 'User', text: '@张三', token: 'ou_SECRET_USER', id: 'ou_SECRET_USER' },
+      { type: 'url', text: 'example.com', link: 'https://example.com/x' },
+    ];
+    const nv = normalize(raw, segmentTextField);
+    expect(nv.kind).toBe('text');
+    expect(nv.display).toBe('请联系 @张三example.com');
+    expect(JSON.stringify(nv)).not.toContain('ou_SECRET_USER');
+    expect(JSON.stringify(nv)).not.toContain('https://');
+  });
+
+  it('全部段都无 text → empty（确认为段数组但不编造内容）', () => {
+    expect(normalize([{ type: 'text', text: '' }], segmentTextField).isEmpty).toBe(true);
+  });
+
+  it('非段数组（多选形态 [{id,text}]，无 type 字段）→ 不误判，折叠为空', () => {
+    const multiSelectLike = [
+      { id: 'opt_1', text: '标签A' },
+      { id: 'opt_2', text: '标签B' },
+    ];
+    const nv = normalize(multiSelectLike, segmentTextField);
+    expect(nv.isEmpty).toBe(true);
+    expect(JSON.stringify(nv)).not.toContain('标签A');
+  });
+
+  it('段数组混入非段结构 → 整体不按段数组处理（折叠为空，不外泄）', () => {
+    const mixed = [{ type: 'text', text: '正常段' }, { id: 'opt_1', text: '选项' }];
+    const nv = normalize(mixed, segmentTextField);
+    expect(nv.isEmpty).toBe(true);
+    expect(JSON.stringify(nv)).not.toContain('正常段');
+  });
+
+  it('链接：段数组 IOpenUrlSegment[] → 解包为 url（多值用「、」连接）', () => {
+    const raw = [
+      { type: 'url', text: 'example.com', link: 'https://example.com/x' },
+      { type: 'url', text: '飞书官网', link: 'https://feishu.cn' },
+    ];
+    expect(normalize(raw, urlField)).toMatchObject({
+      kind: 'url',
+      display: 'example.com、飞书官网',
+      isEmpty: false,
+    });
+  });
+
+  it('链接：非段结构的数组 → 维持历史口径（empty，不外泄）', () => {
+    expect(normalize([{ foo: 'bar' }], urlField).isEmpty).toBe(true);
+  });
+
+  it('自动编号：{value,status} 包装（真机 IOpenAutoNumber）→ 文本语义，保留前导零', () => {
+    const nv = normalize({ value: '0008', status: 'Completed' }, autoNumberField);
+    expect(nv.kind).toBe('text');
+    expect(nv.display).toBe('0008');
+    expect(nv.number).toBe(8); // 纯数字串补充数值语义（筛选用）
+    expect(nv.isEmpty).toBe(false);
+  });
+
+  it('自动编号：带字母前缀的编号 → 文本语义，无 number 字段', () => {
+    const nv = normalize({ value: 'F-2024-0001', status: 'Completed' }, autoNumberField);
+    expect(nv).toMatchObject({ kind: 'text', display: 'F-2024-0001', isEmpty: false });
+    expect(nv.number).toBeUndefined();
+  });
+
+  it('自动编号：裸数字（编辑器样例卡历史形态）→ 数字语义不变', () => {
+    expect(normalize(1280, autoNumberField)).toMatchObject({ kind: 'number', number: 1280, isEmpty: false });
+  });
+
+  it('自动编号：value 为空串 / null → empty', () => {
+    expect(normalize({ value: '', status: 'Completed' }, autoNumberField).isEmpty).toBe(true);
+    expect(normalize({ value: null, status: 'Calculating' }, autoNumberField).isEmpty).toBe(true);
+  });
+});

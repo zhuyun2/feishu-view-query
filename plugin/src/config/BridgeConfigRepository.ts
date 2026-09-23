@@ -19,6 +19,7 @@
  */
 import { backupKey, configKey } from '@/constants';
 import type { BridgeStore } from '@/sdk/base';
+import { formatError } from '@/utils/errorText';
 import { logError } from '@/utils/log';
 import {
   refreshReadOnlyFromPayload,
@@ -85,11 +86,20 @@ export class BridgeConfigRepository implements ConfigRepository {
   private async loadViaFallback(viewId: string, cause?: unknown): Promise<LoadResult> {
     const fallback = this.fallback as ConfigRepository;
     const result = await fallback.load(viewId);
-    const causeMessage = cause instanceof Error ? cause.message : undefined;
+    // 降级原因同样可能来自 SDK 的普通对象，统一经 formatError 保留错误码
+    const causeMessage = cause === undefined ? undefined : formatError(cause);
     return {
       ...result,
       source: 'localStorage',
       degraded: true,
+      // 介质故障 ≠ 数据损坏：bridge 读不到不代表已存的配置坏了。
+      // 只有 fallback 自身解析出「内容不可信」时才保留其 corrupted=true。
+      corrupted: result.corrupted === true,
+      // 可展示原因：此处确实已切到本地 fallback，陈述"仅本地保存"为真。
+      reason:
+        result.corrupted === true
+          ? result.reason
+          : '配置存储读取失败，已回退到本地保存，其他成员看不到你的排版。',
       error: result.error ?? causeMessage ?? 'bridge-degraded',
     };
   }
@@ -118,9 +128,13 @@ export class BridgeConfigRepository implements ConfigRepository {
       return {
         config: null,
         degraded: true,
+        // 介质读取失败（网络 / 权限 / 超时）≠ 数据损坏
+        corrupted: false,
+        // 无 fallback 可用 → 配置既不落 bridge 也不落本地，不能说"已本地保存"
+        reason: '配置存储读取失败，且无可用本地存储，本次排版无法保存。',
         unsupportedNewer: false,
         source: 'bridge',
-        error: err instanceof Error ? err.message : 'bridge-read-failed',
+        error: `bridge-read-failed: ${formatError(err)}`,
       };
     }
   }
@@ -155,7 +169,7 @@ export class BridgeConfigRepository implements ConfigRepository {
       return {
         ok: false,
         reason: 'write-failed',
-        error: err instanceof Error ? err.message : 'bridge-write-failed',
+        error: `bridge-write-failed: ${formatError(err)}`,
       };
     }
   }

@@ -307,6 +307,25 @@
     max-width: 520px;
   }
 
+  /* 错误态的宿主环境诊断文本：等宽、可整段选中复制（真机 E2E 取证用） */
+  .cbv-state__diag {
+    margin: 0;
+    max-width: 560px;
+    padding: var(--space-3) var(--space-4);
+    overflow-x: auto;
+    border-radius: var(--radius-control);
+    background: rgba(0, 0, 0, 0.04);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: var(--font-size-12);
+    line-height: 1.7;
+    text-align: left;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--color-text-2);
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
   /* ============ M2：错误边界 / 空态 ============ */
   .cbv-app--boundary-grid,
   .cbv-app--boundary-doc {
@@ -1170,5 +1189,827 @@
     display: flex;
     justify-content: center;
     gap: var(--space-2);
+  }
+
+  /* ============ §22 字段筛选：面板 / 条件行 / 覆盖率状态行 ============ */
+
+  /* 筛选面板浮层：挂在工具栏「筛选」按钮下方（与 .cbv-note-panel 同位，但更宽更高） */
+  .cbv-filter-popover {
+    position: absolute;
+    right: var(--space-4);
+    top: 54px;
+    z-index: 40;
+    width: 480px;
+    max-width: calc(100vw - var(--space-8));
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: var(--space-3);
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-popover);
+  }
+
+  .cbv-filter-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .cbv-filter-panel__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    font-size: var(--font-size-13);
+    color: var(--color-text-1);
+  }
+
+  .cbv-filter-panel__hint {
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+  }
+
+  .cbv-filter-panel__empty {
+    padding: var(--space-3);
+    text-align: center;
+    font-size: var(--font-size-12);
+    color: var(--color-text-3);
+    background: var(--color-bg-app);
+    border-radius: var(--radius-control);
+  }
+
+  .cbv-filter-panel__rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .cbv-filter-panel__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .cbv-filter-panel__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--color-divider);
+  }
+
+  /* 单条条件行：字段 / 算子 / 值 / 删除（放不下时换行） */
+  .cbv-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-bg-panel);
+  }
+
+  .cbv-filter-row .cbv-select,
+  .cbv-filter-row .cbv-input {
+    flex: 1 1 96px;
+    min-width: 96px;
+  }
+
+  /*
+   * ⭐ 无效条件标红态（§22.5.6 硬要求）：必须有**明显**视觉区分，绝不能让用户看不出某条不生效。
+   * 组件内联了 borderColor / background（F4 产物，属他域不可改），故此处叠加
+   * 左侧红色实心条（inset box-shadow）+ 令牌色，即使内联色被覆盖也一眼可辨。
+   */
+  .cbv-filter-row--invalid {
+    border-color: var(--color-error);
+    background: var(--color-error-light);
+    box-shadow: inset 3px 0 0 0 var(--color-error);
+  }
+
+  /* 无效说明文案：独占一行、整行标红 */
+  .cbv-filter-row__invalid {
+    flex: 1 1 100%;
+    font-size: var(--font-size-11);
+    line-height: var(--line-height-tight);
+    color: var(--color-error);
+  }
+
+  /* 有效条件的字段说明（ⓘ） */
+  .cbv-filter-row__note {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: var(--radius-pill);
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+    cursor: help;
+  }
+
+  /* 覆盖率状态行（§22.11）：常驻覆盖范围 + 未加载全部提示 + 无效条件汇总 */
+  .cbv-filter-scope {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--font-size-12);
+    color: var(--color-text-2);
+    background: var(--color-bg-app);
+    border-bottom: 1px solid var(--color-divider);
+    flex: 0 0 auto;
+  }
+
+  .cbv-filter-scope__text {
+    color: var(--color-text-2);
+  }
+
+  .cbv-filter-scope__incomplete {
+    color: var(--color-warning);
+  }
+
+  .cbv-filter-scope__progress {
+    color: var(--color-text-3);
+  }
+
+  /* 无效条件汇总：整条标红 + 加粗，与「命中 N 条」并排出现（§22.5.6-3） */
+  .cbv-filter-scope__invalid {
+    color: var(--color-error);
+    font-weight: 500;
+  }
+}
+
+/* ============ M3-T08：文档排版编辑器（区块库 / A4 画布 / 插入槽） ============ */
+@layer components {
+  /* —— 区块库（左栏 220px，5 组 12 类） —— */
+  .cbv-blocklib__group {
+    margin-bottom: var(--space-3);
+  }
+
+  .cbv-blocklib__group-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: var(--font-size-12);
+    color: var(--color-text-2);
+    margin-bottom: var(--space-1);
+  }
+
+  .cbv-blocklib__group-count {
+    color: var(--color-text-3);
+  }
+
+  .cbv-blocklib__item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    margin-bottom: var(--space-1);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-bg-panel);
+    color: var(--color-text-1);
+    font-size: var(--font-size-13);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+
+  .cbv-blocklib__item:hover {
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+  }
+
+  .cbv-blocklib__item--dragging {
+    opacity: 0.6;
+  }
+
+  .cbv-blocklib__item--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .cbv-blocklib__icon {
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
+    border-radius: var(--radius-tag);
+    background: var(--color-bg-canvas);
+  }
+
+  .cbv-blocklib__name {
+    flex: 1 1 auto;
+  }
+
+  /* —— A4 画布（中栏）—— */
+  .cbv-editor__doc-canvas {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: var(--space-4);
+    background: var(--color-bg-canvas);
+  }
+
+  .cbv-editor__doc-paper {
+    border-radius: var(--radius-paper);
+  }
+
+  .cbv-editor__doc-flow {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* —— 插入槽：静止时占位很薄；命中时展开并出现 2px 主色指示线 —— */
+  .cbv-editor__doc-slot {
+    display: flex;
+    align-items: center;
+    height: var(--space-2);
+    margin: 0 calc(-1 * var(--space-2));
+  }
+
+  .cbv-editor__doc-slot-line {
+    display: none;
+    width: 100%;
+    height: 2px;
+    background: var(--color-primary);
+    border-radius: 1px;
+  }
+
+  .cbv-editor__doc-slot--over {
+    background: var(--color-primary-light);
+  }
+
+  .cbv-editor__doc-slot--over .cbv-editor__doc-slot-line {
+    display: block;
+  }
+
+  /* —— 区块外壳：选中态视觉标识 —— */
+  .cbv-editor__doc-block {
+    position: relative;
+    border: 1px dashed transparent;
+    border-radius: var(--radius-control);
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .cbv-editor__doc-block:hover {
+    border-color: var(--color-border);
+  }
+
+  .cbv-editor__doc-block--selected {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 1px var(--color-primary);
+  }
+
+  .cbv-editor__doc-block--dragging {
+    opacity: 0.6;
+  }
+
+  .cbv-editor__doc-block-body {
+    padding: 0 var(--space-2);
+  }
+
+  .cbv-editor__doc-pagebreak {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 20px;
+    margin: var(--space-2) 0;
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+    border-top: 1px dashed var(--color-divider);
+    border-bottom: 1px dashed var(--color-divider);
+  }
+
+  .cbv-editor__doc-block-empty {
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--font-size-12);
+    color: var(--color-text-3);
+    background: var(--color-bg-app);
+    border: 1px dashed var(--color-divider);
+    border-radius: var(--radius-control);
+  }
+}
+
+/* ============ M3-T09：文档排版编辑器（三栏装配 / 属性面板 / 折叠段） ============
+ * ⭐ 硬性要求 2：三栏装配**不得改变 A4 纸的有效内容宽度**。
+ *   - 中间列用 `minmax(0, 1fr)`：容器变窄时列宽可被压缩到 0，**不撑破 grid**；
+ *   - 纸页宽由 `DocCanvas` 依 `getPaperSizePx` 固定，**本块绝不声明任何纸页宽度**；
+ *   - 窄于纸宽时由 `.cbv-editor__doc-canvas` 的 `overflow: auto` 横向滚动兜底。
+ *   即：适配靠**横向滚动**，而非压缩 / 回流纸页。
+ */
+@layer components {
+  .cbv-editor__body--doc {
+    grid-template-columns: var(--layout-panel-left) minmax(0, 1fr) var(--layout-panel-right-doc);
+  }
+
+  .cbv-editor__body--doc .cbv-editor__center {
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+    background: var(--color-bg-panel);
+  }
+
+  .cbv-editor__doc-center {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* —— 底栏 h=32：操作提示 + 计数 —— */
+  .cbv-editor__doc-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    flex: 0 0 auto;
+    height: 32px;
+    padding: 0 var(--space-3);
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .cbv-editor__doc-status-count {
+    color: var(--color-text-2);
+  }
+
+  /* —— 右栏：三段折叠区 —— */
+  .cbv-docprops__section + .cbv-docprops__section {
+    margin-top: var(--space-2);
+  }
+
+  .cbv-docprops__empty {
+    padding: var(--space-3);
+    border: 1px dashed var(--color-divider);
+    border-radius: var(--radius-control);
+    background: var(--color-bg-app);
+  }
+
+  .cbv-docprops__empty-title {
+    font-size: var(--font-size-13);
+    color: var(--color-text-2);
+    margin-bottom: var(--space-1);
+  }
+
+  .cbv-docprops__empty-desc {
+    font-size: var(--font-size-12);
+    color: var(--color-text-3);
+  }
+
+  /* —— 通用属性行（由 BlockPropertyForm / PageSetupPanel / DocThemePanel 共用） —— */
+  .cbv-prop-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin-bottom: var(--space-2);
+  }
+
+  .cbv-prop-field--inline {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .cbv-prop-field__label {
+    font-size: var(--font-size-12);
+    color: var(--color-text-2);
+  }
+
+  .cbv-prop-field__control {
+    width: 100%;
+    min-width: 0;
+    padding: 4px var(--space-2);
+    font-size: var(--font-size-12);
+    color: var(--color-text-1);
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+  }
+
+  .cbv-prop-field__control--toggle {
+    width: auto;
+    min-width: auto;
+  }
+
+  .cbv-prop-field__hint {
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+  }
+
+  .cbv-prop-field__checks {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .cbv-prop-field__check {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--font-size-12);
+    color: var(--color-text-1);
+  }
+
+  .cbv-prop-field__rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .cbv-prop-field__row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .cbv-btn--mini {
+    flex: 0 0 auto;
+    padding: 2px var(--space-2);
+    font-size: var(--font-size-11);
+  }
+
+  /* —— 区块属性表单 —— */
+  .cbv-blockform__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+  }
+
+  .cbv-blockform__kind {
+    font-size: var(--font-size-13);
+    color: var(--color-text-1);
+    font-weight: 500;
+  }
+
+  .cbv-blockform__id {
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 50%;
+  }
+
+  .cbv-blockform__group {
+    margin-bottom: var(--space-2);
+  }
+
+  .cbv-blockform__group-title {
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+    margin-bottom: var(--space-1);
+  }
+
+  .cbv-blockform__delete {
+    width: 100%;
+    margin-top: var(--space-2);
+  }
+
+  /* —— 页面设置 —— */
+  .cbv-setup__margins {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-1);
+  }
+
+  .cbv-setup__margin {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .cbv-setup__margin-label {
+    flex: 0 0 auto;
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+  }
+
+  .cbv-setup__hf {
+    margin-top: var(--space-2);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .cbv-setup__hf-title {
+    font-size: var(--font-size-12);
+    color: var(--color-text-2);
+    margin-bottom: var(--space-1);
+  }
+
+  /* —— 文档主题 —— */
+  .cbv-doctheme__scale {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-1);
+  }
+
+  .cbv-doctheme__scale-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .cbv-doctheme__scale-label {
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+  }
+
+  .cbv-doctheme__color {
+    width: 32px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-bg-panel);
+  }
+}
+
+/* ============ 用户反馈：字段选择框模糊查询（FieldSelect，engineer-fs） ============
+ * 共享组件 `components/common/FieldSelect.tsx` 的样式，**追加于文件末尾**，不改动任何既有块。
+ * 浮层定位（left / top / bottom / width / max-height）由组件内联给出（fixed 定位 + 翻转），
+ * 故此处只负责视觉与层级；`z-index` 高于筛选面板浮层（40），低于二次确认（80）。
+ */
+@layer components {
+  .cbv-fieldselect {
+    position: relative;
+    display: inline-flex;
+    flex: 1 1 96px;
+    min-width: 96px;
+  }
+
+  .cbv-fieldselect__input {
+    width: 100%;
+    height: 28px;
+    min-width: 0;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    font-size: var(--font-size-12);
+    background: var(--color-bg-panel);
+    color: var(--color-text-1);
+  }
+
+  .cbv-fieldselect--open .cbv-fieldselect__input {
+    border-color: var(--color-primary);
+  }
+
+  .cbv-fieldselect--disabled .cbv-fieldselect__input {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .cbv-fieldselect__popup {
+    position: fixed;
+    z-index: 60;
+    max-height: 240px;
+    overflow-y: auto;
+    padding: var(--space-1);
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    box-shadow: var(--shadow-popover);
+  }
+
+  .cbv-fieldselect__list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .cbv-fieldselect__option {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    padding: 3px var(--space-2);
+    border-radius: var(--radius-control);
+    font-size: var(--font-size-12);
+    color: var(--color-text-1);
+    cursor: pointer;
+  }
+
+  .cbv-fieldselect__option--active {
+    background: var(--color-bg-app);
+  }
+
+  .cbv-fieldselect__option--selected {
+    font-weight: 500;
+  }
+
+  .cbv-fieldselect__option-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cbv-fieldselect__option-hint {
+    flex: 0 1 auto;
+    max-width: 50%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+  }
+
+  .cbv-fieldselect__empty {
+    padding: var(--space-2);
+    text-align: center;
+    font-size: var(--font-size-12);
+    color: var(--color-text-3);
+  }
+
+  /* 属性面板 / 逐行字段：占满整行（对齐既有 .cbv-prop-field__control 的度量） */
+  .cbv-prop-field .cbv-fieldselect {
+    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .cbv-prop-field__row .cbv-fieldselect {
+    flex: 1 1 auto;
+    width: auto;
+  }
+
+  /* 筛选行：与算子下拉 / 值输入等宽（沿用原 .cbv-filter-row .cbv-select 的度量） */
+  .cbv-filter-row .cbv-fieldselect {
+    flex: 1 1 96px;
+    min-width: 96px;
+  }
+}
+
+/* ============ docx 模板导入 5b：编辑器「模板来源」栏 + 上传 + 模板体检 ============
+ * ⭐ 硬性要求 2（**不得改变画布内容宽度**）：本块只在 doc 编辑区**上方**追加一条**横栏**
+ *   （`.cbv-editor__doc-shell` 内 `flex: 0 0 auto`），**只占垂直空间**；本块**绝不**声明
+ *   任何纸页 / 画布宽度 —— 纸页宽度仍由 `DocCanvas` 依 `getPaperSizePx` 固定，
+ *   内容宽度恒等于 `getContentBox().width`（守卫：`docPathConsistency.test.tsx`）。
+ * ⭐ 问题红字：`.cbv-health__issue--error` 是 `unmatched` / `ambiguous` / `duplicate` /
+ *   `unclosed` / `unopened` 的统一红字样式（**绝不静默**）。
+ */
+@layer components {
+  /* doc 编辑区外壳：上方横栏（flex 0 0 auto）+ 原三栏（flex 1 1 auto） */
+  .cbv-editor__doc-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .cbv-docxsource {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-bg-panel);
+    border-bottom: 1px solid var(--color-divider);
+    min-width: 0;
+  }
+
+  .cbv-docxsource__row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .cbv-docxsource__label {
+    flex: 0 0 auto;
+    font-size: var(--font-size-12);
+    color: var(--color-text-2);
+  }
+
+  .cbv-docxsource__hint {
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+  }
+
+  /* 上传：原生 input 视觉隐藏（保留键盘可达），点击 label 触发文件选择 */
+  .cbv-docxsource__upload {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+    cursor: pointer;
+  }
+
+  .cbv-docxsource__file {
+    position: absolute;
+    inset: 0;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  /* 体检面板：限高内滚动，避免把画布垂直空间挤没（宽度不受影响） */
+  .cbv-health {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    max-height: 40vh;
+    overflow: auto;
+    min-width: 0;
+    padding: var(--space-2);
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-control);
+    background: var(--color-bg-app);
+  }
+
+  .cbv-health__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .cbv-health__title {
+    font-size: var(--font-size-13);
+    font-weight: 500;
+    color: var(--color-text-1);
+  }
+
+  .cbv-health__file {
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cbv-health__checking {
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+  }
+
+  .cbv-health__hint {
+    font-size: var(--font-size-12);
+    color: var(--color-text-3);
+  }
+
+  .cbv-health__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  /* 正向信息：体检确实跑过了（匹配到多少个字段） */
+  .cbv-health__matched {
+    font-size: var(--font-size-12);
+    color: var(--color-text-3);
+  }
+
+  .cbv-health__matched--ok {
+    color: var(--color-success, #00b42a);
+  }
+
+  /* ⭐ 问题一律红字 */
+  .cbv-health__issue {
+    padding: var(--space-2);
+    font-size: var(--font-size-12);
+    border: 1px solid transparent;
+    border-radius: var(--radius-control);
+  }
+
+  .cbv-health__issue--error {
+    color: #f53f3f;
+    background: #fff1f0;
+    border-color: #ffcdc7;
+  }
+
+  .cbv-health__issue-title {
+    margin-bottom: var(--space-1);
+    font-weight: 500;
+  }
+
+  .cbv-health__list {
+    margin: 0;
+    padding-left: var(--space-4);
+    list-style: disc;
+  }
+
+  .cbv-health__item {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: var(--font-size-12);
+    word-break: break-all;
+  }
+
+  .cbv-health__unused {
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+  }
+
+  .cbv-health__unused-title {
+    color: var(--color-text-2);
   }
 }

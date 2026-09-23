@@ -9,7 +9,9 @@
  *  - 拖拽反馈三要素：`<DragOverlay>` 幽灵 + 目标槽位高亮（`isOver`）+ 2px 插入指示线；
  *  - 编辑态点击卡片**不展开详情**（R6：卡片墙隐藏，中栏预览为 `static`）；
  *  - 未保存关闭 → **二次确认**；
- *  - 文档排版模式 M2 仅**入口占位**（M3 实现）。
+ *  - 文档排版模式（M3-T10）：doc 分支接入 **`DocLayoutEditor`**（区块库 / A4 画布 / 属性面板）。
+ *    ⚠️ `DocLayoutEditor` **自带 DndContext**（PointerSensor, distance 4）——doc 分支**绝不再包一层**，
+ *    嵌套 DndContext 会导致拖拽静默错乱（不报错，只是拖不动 / 拖错位置）。card 分支保持自身 DndContext 不变。
  *
  * ⚠️ 与 R1 的一致性：本文以 R1 为准（三栏 220/自适应/300、顶部模式切换、dnd-kit PointerSensor）。
  */
@@ -24,9 +26,10 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import type { CardLayoutConfig, DensityConfig, SlotId } from '@/config/types';
+import type { CardLayoutConfig, DensityConfig, DocTemplate, ImportedDocx, SlotId } from '@/config/types';
 import { applyCardTemplate, type CardTemplateName, type DensityPresetName } from '@/config/presets';
 import { UNSUPPORTED_NEWER_SAVE_MESSAGE } from '@/config/ConfigRepository';
+import { resolveDocSource } from '@/doc/template/storage';
 import { useDraftStore } from '@/state/DraftStore';
 import { useUiStore } from '@/state/UiStore';
 import { useViewStore } from '@/state/ViewStore';
@@ -36,6 +39,8 @@ import { FieldPool } from './FieldPool';
 import { SlotLanes } from './SlotLanes';
 import { PreviewSampleCard } from './PreviewSampleCard';
 import { PropertyPanel } from './PropertyPanel';
+import { DocLayoutEditor } from './doc/DocLayoutEditor';
+import { DocxTemplateSourceBar } from './doc/DocxTemplateSourceBar';
 import { addFieldToSlot, findPlacement, groupFieldPool, movePlacement, removePlacement, resolveEditorClose } from './placementMath';
 import { parseDragId } from './dragIds';
 
@@ -63,12 +68,18 @@ export function ConfigDrawer(): JSX.Element | null {
   const canEditConfig = useViewStore((state) => state.canEditConfig);
   const unsupportedNewer = useViewStore((state) => state.unsupportedNewer);
   const persistConfig = useViewStore((state) => state.persistConfig);
+  /** 当前视图 id：导入模板的分块 key 需要（`cbv:tpl:{viewId}:…`）；缺省 `''` 时仅走 legacy 内联 */
+  const envViewId = useViewStore((state) => state.env?.viewId ?? '');
 
   const draftActive = useDraftStore((state) => state.active);
   const cardDraft = useDraftStore((state) => state.cardDraft);
+  const docDraft = useDraftStore((state) => state.docDraft);
   const densityDraft = useDraftStore((state) => state.densityDraft);
   const themeDraft = useDraftStore((state) => state.themeDraft);
   const highlightDraft = useDraftStore((state) => state.highlightDraft);
+  // ⭐ 「模板来源」与「导入的 docx」草稿（doc 分支：来源切换 / 上传写草稿，保存时进载荷）
+  const docSourceDraft = useDraftStore((state) => state.docSourceDraft);
+  const importedDocxDraft = useDraftStore((state) => state.importedDocxDraft);
   const dirty = useDraftStore((state) => state.dirty);
 
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
@@ -193,6 +204,27 @@ export function ConfigDrawer(): JSX.Element | null {
     [cardDraft],
   );
 
+  // ── 文档排版（M3-T10）：变更入口 = 草稿 doc 分支；变更前先快照以支持撤销 ──
+  // ⚠️ 必须放在 `if (!editorOpen) return null;` **之前**：Hook 调用不得位于提前 return 之后，
+  //    否则 editorOpen 由 true → false 时 Hook 数变化 → React 抛「Rendered fewer hooks than expected」。
+  const handleDocChange = useCallback((updater: (template: DocTemplate) => DocTemplate): void => {
+    useDraftStore.getState().updateDoc(updater);
+  }, []);
+  const handleDocBeforeChange = useCallback((): void => {
+    useDraftStore.getState().snapshot();
+  }, []);
+
+  // ── 模板来源（5b）：切换来源**只改 `docSource`**，已上传的 `importedDocx` 原样保留 ──
+  // ⚠️ 同样放在 `if (!editorOpen) return null;` 之前（Hook 调用不得位于提前 return 之后）。
+  const handleDocSourceChange = useCallback((next: 'blocks' | 'imported'): void => {
+    useDraftStore.getState().snapshot();
+    useDraftStore.getState().setDocSource(next);
+  }, []);
+  const handleImportedDocxChange = useCallback((imported: ImportedDocx): void => {
+    useDraftStore.getState().snapshot();
+    useDraftStore.getState().setImportedDocx(imported);
+  }, []);
+
   if (!editorOpen) return null;
 
   const layout: CardLayoutConfig | null = cardDraft;
@@ -201,6 +233,12 @@ export function ConfigDrawer(): JSX.Element | null {
   const groups = layout ? groupFieldPool(fields, layout) : { used: [], unused: [], unsupported: [] };
 
   const mode: EditorModeUi = editMode === 'doc' ? 'doc' : 'card';
+
+  // ⭐ 「模板来源」归一：旧配置 `docSource` 缺省 → `'blocks'`（与详情侧同一处兜底 `resolveDocSource`，
+  //    避免两侧对「缺省」的解释分叉）。`importedDocx` 即使是 `'blocks'` 来源也**照常传入**——
+  //    这样切换来源不会丢模板（详见 DraftStore 的约束注释）。
+  const docSource: 'blocks' | 'imported' = resolveDocSource({ docSource: docSourceDraft });
+  const importedDocx: ImportedDocx | null = importedDocxDraft ?? null;
 
   const handleLayoutChange = (next: CardLayoutConfig): void => {
     useDraftStore.getState().updateCard(() => next);
@@ -257,17 +295,40 @@ export function ConfigDrawer(): JSX.Element | null {
       </header>
 
       {mode === 'doc' ? (
-        <div className="cbv-editor__doc-placeholder">
-          <div className="cbv-state">
-            <div className="cbv-state__title">文档排版即将上线</div>
-            <div className="cbv-state__desc">
-              文档排版（页面设置 / 区块库 / 分页与打印）将在下个版本提供。当前请使用「卡片排版」。
-            </div>
-            <button type="button" className="cbv-btn cbv-btn--primary" onClick={() => setEditMode('card')}>
-              返回卡片排版
-            </button>
+        docDraft ? (
+          /*
+           * ⭐ 5b：「模板来源」栏（可视化排版 / 导入 docx）+ 上传 + 模板体检 —— 位于 doc 编辑区**最上方**。
+           * 它是**横条**（只占垂直空间）→ 不改变画布内容宽度（`getContentBox().width` 恒等式仍成立）。
+           */
+          <div className="cbv-editor__doc-shell" data-doc-shell="true">
+            <DocxTemplateSourceBar
+              source={docSource}
+              importedDocx={importedDocx}
+              fields={fields}
+              viewId={envViewId}
+              onSourceChange={handleDocSourceChange}
+              onImportedDocxChange={handleImportedDocxChange}
+            />
+            {/*
+             * ⚠️ 关键约束：`DocLayoutEditor` 自带 dnd-kit 拖拽上下文（PointerSensor, distance 4）+ 拖拽幽灵。
+             * doc 分支**绝不再包一层拖拽上下文** —— 嵌套会导致拖拽静默错乱（内层传感器捕获后外层不响应 /
+             * 落点跨上下文失配），且**不会报任何错**，只是「拖不动」或「拖到错位置」。
+             */}
+            <DocLayoutEditor
+              template={docDraft}
+              fields={fields}
+              onChange={handleDocChange}
+              onBeforeChange={handleDocBeforeChange}
+              locale="zh-CN"
+            />
           </div>
-        </div>
+        ) : (
+          <div className="cbv-editor__doc-placeholder">
+            <div className="cbv-state">
+              <div className="cbv-state__desc">正在准备编辑器…</div>
+            </div>
+          </div>
+        )
       ) : layout && density && theme ? (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="cbv-editor__body">

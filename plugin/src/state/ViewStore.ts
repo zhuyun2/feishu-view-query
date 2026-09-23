@@ -5,7 +5,7 @@
  * 表现层不得直接调 SDK，故数据源句柄与配置仓储句柄均由本层持有并暴露动作。
  */
 import { create } from 'zustand';
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 import { DEFAULT_PAGE_SIZE } from '@/constants';
 import type { CardViewConfig } from '@/config/types';
 import type { ConfigRepository, ConfigSource, SaveResult } from '@/config/ConfigRepository';
@@ -14,8 +14,21 @@ import type { FieldMetaLite } from '@/fields/fieldTypes';
 import type { PageResult, RecordDataSource } from '@/data/RecordDataSource';
 import { appendUniqueRecords } from '@/data/recordPages';
 import { logError } from '@/utils/log';
+import { formatError } from '@/utils/errorText';
+import type { ErrorShape, HostProbeResult } from '@/utils/hostProbe';
 
 export type ViewStatus = 'boot' | 'loading' | 'browse' | 'error';
+
+/**
+ * 错误态携带的**诊断附件**（真机 E2E 取证用）。
+ * 两者都只在 error 态写入、`applyInit` 成功时清空，成功路径不出现。
+ */
+export interface ErrorDiagnostics {
+  /** 宿主环境取证（window.name / 是否在 iframe / 协议判定 …） */
+  probe?: HostProbeResult | null;
+  /** 错误值的原始形态（String(err) / typeof / instanceof Error） */
+  shape?: ErrorShape | null;
+}
 
 /** 手动刷新时的页大小（沿用官方上限；增量加载用 DEFAULT_PAGE_SIZE） */
 const REFRESH_PAGE_SIZE = 200;
@@ -28,6 +41,13 @@ export interface InitPayload {
   configSource: ConfigSource;
   degraded: boolean;
   degradedReason: string;
+  /**
+   * 是否为**数据损坏**（与 `degraded` 区分：`degraded` 还涵盖「介质读取失败」）。
+   *
+   * 供 Banner 判定「该显示『数据损坏』还是『介质降级 R8』」——后者会陈述存储位置，
+   * 若在数据损坏时误显，等于向用户说了一句假话（数据其实还在 bridge）。
+   */
+  corrupted: boolean;
   /** 数据损坏（checksum / 非法 JSON / 迁移失败）→ 保持 source 不切介质，仅回退默认模板 + 备份 */
   configCorrupted: boolean;
   unsupportedNewer: boolean;
@@ -44,13 +64,19 @@ export interface InitPayload {
 export interface ViewState {
   status: ViewStatus;
   errorMessage: string | null;
+  /** 失败发生在哪一步（真机诊断用；与 errorMessage 分开保存，便于 UI 分开展示） */
+  errorStep: string | null;
+  /** 宿主环境取证（仅 error 态；成功路径为 null） */
+  errorProbe: HostProbeResult | null;
+  /** 错误值原始形态（仅 error 态；成功路径为 null） */
+  errorShape: ErrorShape | null;
 
   env: EnvSnapshot | null;
   viewName: string;
   fields: FieldMetaLite[];
   fieldsById: Record<string, FieldMetaLite>;
 
-  records: IRecord[];
+  records: SdkRecord[];
   total: number;
   hasMore: boolean;
   nextPageToken: string | null;
@@ -60,6 +86,8 @@ export interface ViewState {
   configSource: ConfigSource;
   degraded: boolean;
   degradedReason: string;
+  /** 数据损坏标记（区别于「介质降级」`degraded`）——供 Banner 二选一判定 */
+  corrupted: boolean;
   /** 数据损坏标记（区别于介质降级 `degraded`） */
   configCorrupted: boolean;
   unsupportedNewer: boolean;
@@ -71,7 +99,7 @@ export interface ViewState {
   repository: ConfigRepository | null;
 
   setStatus: (status: ViewStatus) => void;
-  setError: (message: string) => void;
+  setError: (message: string, step?: string, diagnostics?: ErrorDiagnostics) => void;
   setLoadingMore: (loading: boolean) => void;
   applyInit: (payload: InitPayload) => void;
   appendRecords: (page: PageResult) => void;
@@ -95,6 +123,9 @@ function indexFields(fields: FieldMetaLite[]): Record<string, FieldMetaLite> {
 export const useViewStore = create<ViewState>((set, get) => ({
   status: 'boot',
   errorMessage: null,
+  errorStep: null,
+  errorProbe: null,
+  errorShape: null,
 
   env: null,
   viewName: '',
@@ -111,6 +142,7 @@ export const useViewStore = create<ViewState>((set, get) => ({
   configSource: 'default',
   degraded: false,
   degradedReason: '',
+  corrupted: false,
   configCorrupted: false,
   unsupportedNewer: false,
   provisionedFromTemplate: false,
@@ -121,7 +153,14 @@ export const useViewStore = create<ViewState>((set, get) => ({
   repository: null,
 
   setStatus: (status) => set({ status }),
-  setError: (message) => set({ errorMessage: message, status: 'error' }),
+  setError: (message, step, diagnostics) =>
+    set({
+      errorMessage: message,
+      errorStep: step ?? null,
+      errorProbe: diagnostics?.probe ?? null,
+      errorShape: diagnostics?.shape ?? null,
+      status: 'error',
+    }),
   setLoadingMore: (loading) => set({ loadingMore: loading }),
 
   applyInit: (payload) =>
@@ -134,6 +173,7 @@ export const useViewStore = create<ViewState>((set, get) => ({
       configSource: payload.configSource,
       degraded: payload.degraded,
       degradedReason: payload.degradedReason,
+      corrupted: payload.corrupted === true,
       configCorrupted: payload.configCorrupted === true,
       unsupportedNewer: payload.unsupportedNewer,
       provisionedFromTemplate: payload.provisionedFromTemplate,
@@ -146,6 +186,9 @@ export const useViewStore = create<ViewState>((set, get) => ({
       nextPageToken: payload.firstPage.pageToken,
       total: payload.total,
       errorMessage: null,
+      errorStep: null,
+      errorProbe: null,
+      errorShape: null,
     }),
 
   appendRecords: (page) =>
@@ -185,9 +228,11 @@ export const useViewStore = create<ViewState>((set, get) => ({
       });
     } catch (err) {
       logError('state.refresh', err);
+      // 保留 SDK 原始错误码 / 原因（非 Error 对象不再退化成「刷新失败」）
       set({
         loadingMore: false,
-        errorMessage: err instanceof Error ? err.message : '刷新失败',
+        errorMessage: formatError(err),
+        errorStep: 'refresh',
       });
     }
   },

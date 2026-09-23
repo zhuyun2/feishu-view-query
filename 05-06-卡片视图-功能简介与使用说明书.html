@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>卡片视图 · 功能简介与使用说明书（v1.4.1）</title>
+<style>
+  :root{
+    --ink:#1f2329; --ink-2:#4e5969; --ink-3:#86909c; --line:#e5e6eb; --bg:#ffffff;
+    --bg-soft:#f7f8fa; --brand:#3370ff; --brand-soft:#eef3ff; --ok:#00b42a; --warn:#ff7d00;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg-soft);color:var(--ink);
+    font:15px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px;display:grid;grid-template-columns:236px 1fr;gap:28px;}
+  @media (max-width:900px){.wrap{grid-template-columns:1fr}.toc{position:static!important;max-height:none!important}}
+  .toc{position:sticky;top:24px;align-self:start;max-height:calc(100vh - 60px);overflow:auto;
+    background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 14px}
+  .toc h2{margin:0 0 10px;font-size:13px;letter-spacing:.08em;color:var(--ink-3);text-transform:uppercase}
+  .toc ul{list-style:none;margin:0;padding:0}
+  .toc .l2{margin-top:6px}
+  .toc .l3{padding-left:12px}
+  .toc a{color:var(--ink-2);text-decoration:none;font-size:13px;display:block;padding:2px 0}
+  .toc a:hover{color:var(--brand)}
+  .doc{background:#fff;border:1px solid var(--line);border-radius:14px;padding:34px 38px}
+  .doc + .doc{margin-top:22px}
+  h1{font-size:26px;line-height:1.4;margin:0 0 6px}
+  h2{font-size:20px;margin:34px 0 10px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h3{font-size:16px;margin:24px 0 8px}
+  h4{font-size:15px;margin:18px 0 6px;color:var(--ink-2)}
+  p{margin:10px 0}
+  hr{border:0;border-top:1px solid var(--line);margin:26px 0}
+  code{background:#f2f3f5;border-radius:5px;padding:1px 5px;font-size:13px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;color:#c7254e}
+  pre{background:#f7f8fa;border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow:auto}
+  pre code{background:none;color:var(--ink-2);padding:0}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px;display:block;overflow:auto}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:var(--brand-soft);font-weight:600;white-space:nowrap}
+  tbody tr:nth-child(even){background:#fcfcfd}
+  blockquote{margin:14px 0;padding:12px 16px;background:var(--brand-soft);border-left:3px solid var(--brand);
+    border-radius:0 8px 8px 0;color:var(--ink-2)}
+  ul,ol{margin:10px 0;padding-left:22px}
+  li{margin:4px 0}
+  .badge{display:inline-block;background:var(--brand);color:#fff;border-radius:999px;padding:2px 10px;font-size:12px}
+  .actions{position:fixed;right:18px;bottom:18px;z-index:9}
+  .actions button{border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 14px;cursor:pointer;
+    font-size:13px;color:var(--ink-2);box-shadow:0 2px 10px rgba(31,35,41,.08)}
+  .actions button:hover{color:var(--brand);border-color:var(--brand)}
+  @media print{
+    body{background:#fff}
+    .toc,.actions{display:none!important}
+    .wrap{display:block;max-width:none;padding:0}
+    .doc{border:0;border-radius:0;padding:0}
+    h2{page-break-after:avoid}
+    table,pre,blockquote{page-break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="toc">
+    <h2>目录</h2>
+    <div class="badge">v1.4.1</div>
+    <div style="margin:10px 0 4px;font-weight:600;font-size:13px">功能简介</div>
+    <ul><li class="l2"><a href="#1-一句话定位-2">1. 一句话定位</a></li><li class="l2"><a href="#2-它解决什么问题-3">2. 它解决什么问题</a></li><li class="l2"><a href="#3-核心能力一览-4">3. 核心能力一览</a></li><li class="l3"><a href="#3-1-阅读侧-所有人可用-5">3.1 阅读侧（所有人可用）</a></li><li class="l3"><a href="#3-2-配置侧-需表格编辑权限-6">3.2 配置侧（需表格编辑权限）</a></li><li class="l2"><a href="#4-关键主张与保障-7">4. 关键主张与保障</a></li><li class="l2"><a href="#5-典型场景-8">5. 典型场景</a></li><li class="l2"><a href="#6-适用范围与边界-9">6. 适用范围与边界</a></li></ul>
+    <div style="margin:14px 0 4px;font-weight:600;font-size:13px">使用说明书</div>
+    <ul><li class="l2"><a href="#1-快速上手-5-步-2">1. 快速上手（5 步）</a></li><li class="l2"><a href="#2-界面总览-3">2. 界面总览</a></li><li class="l3"><a href="#2-1-顶部工具栏-从左到右-4">2.1 顶部工具栏（从左到右）</a></li><li class="l3"><a href="#2-2-状态行-有筛选或搜索时出现-5">2.2 状态行（有筛选或搜索时出现）</a></li><li class="l3"><a href="#2-3-各类提示横幅-6">2.3 各类提示横幅</a></li><li class="l3"><a href="#2-4-空态与错误态-7">2.4 空态与错误态</a></li><li class="l2"><a href="#3-浏览记录-8">3. 浏览记录</a></li><li class="l3"><a href="#3-1-卡片结构-9">3.1 卡片结构</a></li><li class="l3"><a href="#3-2-密度三档-10">3.2 密度三档</a></li><li class="l3"><a href="#3-3-计数文案-11">3.3 计数文案</a></li><li class="l2"><a href="#4-搜索-12">4. 搜索</a></li><li class="l2"><a href="#5-字段筛选-13">5. 字段筛选</a></li><li class="l3"><a href="#5-1-面板操作-14">5.1 面板操作</a></li><li class="l3"><a href="#5-2-选字段-15">5.2 选字段</a></li><li class="l3"><a href="#5-3-算子矩阵-按字段类型-16">5.3 算子矩阵（按字段类型）</a></li><li class="l3"><a href="#5-4-值输入控件-17">5.4 值输入控件</a></li><li class="l3"><a href="#5-5-无效条件如何提示-重要-18">5.5 无效条件如何提示（重要）</a></li><li class="l3"><a href="#5-6-空值条件不会隐藏数据-设计保证-19">5.6 「空值条件不会隐藏数据」（设计保证）</a></li><li class="l3"><a href="#5-7-与原生表格筛选的关系-20">5.7 与原生表格筛选的关系</a></li><li class="l2"><a href="#6-查看记录详情-21">6. 查看记录详情</a></li><li class="l2"><a href="#7-排版编辑器-卡片排版-22">7. 排版编辑器 · 卡片排版</a></li><li class="l3"><a href="#7-1-拖拽绑定字段-23">7.1 拖拽绑定字段</a></li><li class="l3"><a href="#7-2-槽位配置-右栏-槽位配置-24">7.2 槽位配置（右栏 · 槽位配置）</a></li><li class="l3"><a href="#7-3-卡片模板-密度-主题-25">7.3 卡片模板 / 密度 / 主题</a></li><li class="l3"><a href="#7-4-条件高亮-26">7.4 条件高亮</a></li><li class="l3"><a href="#7-5-草稿-撤销与保存-27">7.5 草稿、撤销与保存</a></li><li class="l2"><a href="#8-排版编辑器-文档排版-28">8. 排版编辑器 · 文档排版</a></li><li class="l3"><a href="#8-1-两种模板来源-29">8.1 两种模板来源</a></li><li class="l3"><a href="#8-2-区块库-12-类-5-组-30">8.2 区块库（12 类，5 组）</a></li><li class="l3"><a href="#8-3-画布操作-31">8.3 画布操作</a></li><li class="l3"><a href="#8-4-右侧属性面板-三折叠-32">8.4 右侧属性面板（三折叠）</a></li><li class="l2"><a href="#9-导入-docx-模板-33">9. 导入 .docx 模板</a></li><li class="l3"><a href="#9-1-上传与规则-34">9.1 上传与规则</a></li><li class="l3"><a href="#9-2-占位符语法-35">9.2 占位符语法</a></li><li class="l3"><a href="#9-3-体检结果怎么看-36">9.3 体检结果怎么看</a></li><li class="l3"><a href="#9-4-检测存储容量-可选-排障用-37">9.4 检测存储容量（可选，排障用）</a></li><li class="l3"><a href="#9-5-详情侧渲染说明-38">9.5 详情侧渲染说明</a></li><li class="l2"><a href="#10-配置保存与共享-39">10. 配置保存与共享</a></li><li class="l2"><a href="#11-常见问题-faq-40">11. 常见问题（FAQ）</a></li><li class="l2"><a href="#12-已知限制-请留意-41">12. 已知限制（请留意）</a></li></ul>
+  </nav>
+  <main>
+    <article class="doc"><h1 id="功能简介-飞书多维表格扩展视图插件-卡片视图-1">功能简介｜飞书多维表格扩展视图插件 ——「卡片视图」</h1>
+<table><thead><tr><th>项</th><th>内容</th></tr></thead><tbody>
+<tr><td>产品名称</td><td>卡片视图（Card View）</td></tr>
+<tr><td>产品形态</td><td>飞书多维表格插件 · <strong>数据表视图</strong>类型（出现在「新建视图」的视图类型列表中）</td></tr>
+<tr><td>发布形态</td><td>飞书企业自建应用（非应用商店上架）</td></tr>
+<tr><td>当前版本</td><td><strong>v1.4.1</strong></td></tr>
+<tr><td>文档日期</td><td>2026-09-23</td></tr>
+<tr><td>配套文档</td><td><code>05-功能简介.md</code>（本文）、<code>06-使用说明书.md</code>（操作手册）</td></tr>
+</tbody></table>
+<hr />
+<h2 id="1-一句话定位-2">1. 一句话定位</h2>
+<blockquote><strong>把「横向拖表格找字段」变成「一眼看清关键信息的卡片墙」</strong> —— 不改变字段、不复制数据，为同一张多维表格定制出最贴合业务阅读习惯的卡片视图。</blockquote>
+<p>它不替换你的表，也不搬走你的数据：只是给同一份数据换一副「以业务语言阅读」的面孔。</p>
+<hr />
+<h2 id="2-它解决什么问题-3">2. 它解决什么问题</h2>
+<table><thead><tr><th>常见困扰</th><th>卡片视图的做法</th><th>用户感受到的变化</th></tr></thead><tbody>
+<tr><td>字段多，要横向拖动才能看到关键列</td><td>每条记录收敛为一张卡片，关键字段按重要性排进固定槽位</td><td>一屏看完一批记录，不再横向滚动</td></tr>
+<tr><td>同一张表不同场景想要的版式不同（客户视角 / 盘点视角…）</td><td>同一张表可建多个卡片视图，各自独立配置</td><td>不必复制表格、不必删字段</td></tr>
+<tr><td>详情要看的东西和列表不一样</td><td>详情沿用同一套自定义排版，支持扩展为全字段</td><td>卡片与详情视觉一致，学习成本为零</td></tr>
+<tr><td>异常记录（逾期、超期）靠肉眼扫</td><td><strong>条件高亮</strong>：按字段值给整卡边框或字段着色</td><td>异常一眼可见</td></tr>
+<tr><td>排版要给非技术同事用，但改版式要开发</td><td>可视化<strong>拖拽</strong>排版 + 模板套用 + 撤销</td><td>业务人员自己就能改</td></tr>
+<tr><td>已有 Word 模板（合同、标签、工单）想直接套用</td><td><strong>导入 .docx 模板 + 占位符</strong>读表格字段</td><td>沿用既有模板，不必重画</td></tr>
+</tbody></table>
+<hr />
+<h2 id="3-核心能力一览-4">3. 核心能力一览</h2>
+<h3 id="3-1-阅读侧-所有人可用-5">3.1 阅读侧（所有人可用）</h3>
+<table><thead><tr><th>能力</th><th>说明</th></tr></thead><tbody>
+<tr><td><strong>卡片视图</strong></td><td>四槽位卡片：标题 / 副标题 / 属性 / 底部；无值字段自动隐藏、空槽位自动收合</td></tr>
+<tr><td><strong>密度三档</strong></td><td>紧凑 / 标准 / 宽松 —— 联动卡片宽度、间距、行数与属性区最多行数</td></tr>
+<tr><td><strong>条件高亮</strong></td><td>按条件让「整卡边框 / 指定字段 / 指定标签」着色，支持 AND、OR 与优先级</td></tr>
+<tr><td><strong>搜索</strong></td><td>匹配<strong>已放入卡片</strong>字段的显示文本，大小写不敏感</td></tr>
+<tr><td><strong>字段筛选</strong></td><td>插件内自建筛选器，算子体系与原生筛选一致；支持模糊查找字段；条件即时生效；支持 AND / OR</td></tr>
+<tr><td><strong>记录详情</strong></td><td>点击卡片（或聚焦后按 Enter / 空格）从右侧滑出详情抽屉；单张连续长页，可缩放、全屏、拖宽</td></tr>
+<tr><td><strong>悬浮预览</strong></td><td>悬停卡片 150ms 后弹出轻量气泡（标题 + 属性区前 4 行）</td></tr>
+<tr><td><strong>大表流畅浏览</strong></td><td>每批 200 条增量加载，滚动到底部自动续载；骨架屏过渡</td></tr>
+</tbody></table>
+<h3 id="3-2-配置侧-需表格编辑权限-6">3.2 配置侧（需表格编辑权限）</h3>
+<table><thead><tr><th>能力</th><th>说明</th></tr></thead><tbody>
+<tr><td><strong>可视化拖拽排版</strong></td><td>从字段池拖字段到槽位，槽位内可拖动排序，拖出即移除；全程实时预览</td></tr>
+<tr><td><strong>卡片模板</strong></td><td>内置多种版式预设，一键换版（保留已用字段）</td></tr>
+<tr><td><strong>主题与密度</strong></td><td>主色、圆角、阴影、标题字重、字号缩放；密度三档</td></tr>
+<tr><td><strong>文档排版</strong></td><td>12 类区块（标题/段落/静态文本/键值网格/字段清单/标签行/图片/表格/分隔线/间距/强制分页/页脚元信息）拖拽编排，右侧属性面板逐块精调</td></tr>
+<tr><td><strong>导入 .docx 模板</strong></td><td>用 <code>{字段名}</code> 占位符读表格字段，<strong>保真渲染</strong>到详情；上传即体检，提前暴露字段名写错、循环未闭合等问题</td></tr>
+<tr><td><strong>团队共享</strong></td><td>配置存于飞书文档级存储（按视图隔离），同一文档同一视图的成员共用一套版式</td></tr>
+</tbody></table>
+<hr />
+<h2 id="4-关键主张与保障-7">4. 关键主张与保障</h2>
+<ul>
+<li><strong>数据不搬家</strong>：数据始终留在原多维表格，插件只改变「呈现层」，不产生数据副本与同步风险。</li>
+<li><strong>只读不污染</strong>：插件<strong>不写入表格数据</strong>，<strong>不改写视图的原生筛选 / 排序</strong>；唯一会写的是插件自有的排版配置。</li>
+<li><strong>筛选不外泄</strong>：筛选在插件内客户端求值，<strong>绝不下推服务端</strong>，因此不会影响他人看到的原生视图。</li>
+<li><strong>配置有兜底</strong>：配置损坏时自动回退默认排版、保留原始数据备份，并明确提示「未改动你的表格数据」。</li>
+<li><strong>权限自适配</strong>：无编辑权限的用户只读浏览（配置入口自动隐藏/禁用）；遇到更高版本插件写入的配置时进入只读模式，不覆盖较新数据。</li>
+<li><strong>零新增依赖</strong>：产物自包含、无自建后端、无外部 CDN。</li>
+</ul>
+<hr />
+<h2 id="5-典型场景-8">5. 典型场景</h2>
+<ol>
+<li><strong>客户档案卡</strong>：标题=客户名称，副标题=所属行业/负责人，属性=合同金额/最近跟进时间，底部=状态标签。销售开会前一屏 30 张卡，3 秒定位重点客户。</li>
+<li><strong>项目进度墙</strong>：属性区放负责人/截止日期/进度，配置条件高亮「逾期记录卡边变红」，晨会直接投屏。</li>
+<li><strong>工单/合同套打信息</strong>：用既有 Word 模板导入，占位符绑定字段，点开卡片即见一份按模板生成的完整单据信息（本期为<strong>信息呈现</strong>，不含打印导出）。</li>
+</ol>
+<hr />
+<h2 id="6-适用范围与边界-9">6. 适用范围与边界</h2>
+<table><thead><tr><th>维度</th><th>说明</th></tr></thead><tbody>
+<tr><td>适用端</td><td>桌面端飞书客户端与网页版（移动端完整编辑不在本期范围）</td></tr>
+<tr><td>数据规模</td><td>单表、万行级（每批 200 条增量加载，配合「加载全部并重新筛选」）</td></tr>
+<tr><td>定位</td><td>阅读/浏览增强视图，<strong>不做数据写回、不做图表看板、不做跨表聚合</strong></td></tr>
+<tr><td>模板格式</td><td>本期支持 <strong>.docx</strong>（xlsx 模板为后续规划）</td></tr>
+<tr><td>模板体积</td><td>单个模板 ≤ <strong>1MB</strong>；受平台存储能力约束，实际可写入量可在插件内一键探测</td></tr>
+<tr><td>打印导出</td><td><strong>本期不含</strong>（后续规划）</td></tr>
+</tbody></table>
+<blockquote>详细操作步骤、模板占位符语法、常见问题与已知限制，见 <code>06-使用说明书.md</code>。</blockquote></article>
+    <article class="doc"><h1 id="使用说明书-飞书多维表格-卡片视图-插件-1">使用说明书｜飞书多维表格「卡片视图」插件</h1>
+<table><thead><tr><th>项</th><th>内容</th></tr></thead><tbody>
+<tr><td>适用版本</td><td>v1.4.1</td></tr>
+<tr><td>适用对象</td><td>使用 / 配置卡片视图的业务人员与表格搭建者</td></tr>
+<tr><td>文档日期</td><td>2026-09-23</td></tr>
+<tr><td>配套文档</td><td><code>05-功能简介.md</code>（产品介绍）</td></tr>
+</tbody></table>
+<hr />
+<h2 id="1-快速上手-5-步-2">1. 快速上手（5 步）</h2>
+<ol>
+<li><strong>打开视图</strong>：在多维表格「新建视图」中选择<strong>卡片视图</strong>；已创建的可直接从视图列表切换。</li>
+<li><strong>首次打开</strong>：插件会按默认模板生成一份配置，并提示「首次打开已按默认模板生成配置，可直接使用或按需调整。」（如需重配可点横幅上的「立即配置」）。</li>
+<li><strong>配置排版</strong>（需表格编辑权限）：点工具栏 <strong><code>⚙ 配置</code></strong> 打开「卡片排版编辑器」——左侧拖字段、中间实时预览、右侧调属性；改完点 <strong><code>保存</code></strong>。</li>
+<li><strong>筛选用</strong>：点工具栏 <strong><code>筛选</code></strong> → <code>+ 添加条件</code> → 选字段、选算子、填值（<strong>即时生效</strong>）→ 点 <code>完成</code> 收起面板。</li>
+<li><strong>看详情</strong>：点击任意卡片，右侧滑出详情；按 <code>Esc</code> 或点 ✕ 关闭。</li>
+</ol>
+<blockquote>没有编辑权限时，<code>⚙ 配置</code> 按钮为禁用态（提示「仅查看权限，无配置入口」），浏览、搜索、筛选、看详情一切照常可用。</blockquote>
+<hr />
+<h2 id="2-界面总览-3">2. 界面总览</h2>
+<h3 id="2-1-顶部工具栏-从左到右-4">2.1 顶部工具栏（从左到右）</h3>
+<table><thead><tr><th>控件</th><th>作用</th><th>备注</th></tr></thead><tbody>
+<tr><td>视图名</td><td>显示当前视图名称</td><td>未命名时显示「卡片视图」</td></tr>
+<tr><td>计数</td><td>当前记录总数 / 筛选命中数</td><td>文案见 §3.3</td></tr>
+<tr><td>搜索框（🔍）</td><td>按关键词过滤<strong>已加载</strong>记录</td><td>占位符「搜索记录」，有值时出现 ✕ 清空</td></tr>
+<tr><td><code>筛选</code> / <code>筛选 (n)</code></td><td>打开筛选面板；已启用 n 条条件时显示计数并高亮</td><td>面板内为即时生效，见 §5</td></tr>
+<tr><td><code>排序</code></td><td>说明面板：卡片视图沿用表格视图的<strong>原生排序</strong></td><td>如需改排序，请回到视图工具栏修改；本插件不改动排序</td></tr>
+<tr><td><code>刷新</code> / <code>刷新中…</code></td><td>重新读取数据与配置</td><td>加载中按钮禁用</td></tr>
+<tr><td><code>⚙ 配置</code></td><td>进入「卡片排版编辑器」</td><td>无权限或配置来自更高版本时禁用</td></tr>
+<tr><td><code>⋯</code> 更多</td><td><code>刷新数据</code> / <code>清空搜索</code> / <code>打开排版编辑器</code></td><td>——</td></tr>
+</tbody></table>
+<h3 id="2-2-状态行-有筛选或搜索时出现-5">2.2 状态行（有筛选或搜索时出现）</h3>
+<p>常驻一行说明「筛选作用范围」，例如：</p>
+<ul>
+<li><code>已在已加载的 200 / 共 12,480 条中筛选，命中 37 条</code></li>
+<li>已加载全部时：<code>已在全部 12,480 条中筛选，命中 37 条</code></li>
+<li>叠加搜索时追加：<code>，命中 37 条（叠加搜索后 5 条）</code></li>
+<li>未加载全部时附「未加载全部」标签，并提供按钮 <strong><code>加载全部并重新筛选</code></strong>（点击后自动翻页至末页，重新给出全量筛选结果；进度显示 <code>已加载 200 / 共 12,480</code>）</li>
+<li>存在未生效条件时追加：<code>（其中 1 个条件未生效）</code></li>
+</ul>
+<h3 id="2-3-各类提示横幅-6">2.3 各类提示横幅</h3>
+<table><thead><tr><th>横幅类型</th><th>文案要点（逐字）</th><th>能否关闭</th></tr></thead><tbody>
+<tr><td>首开 / 复制视图</td><td>「首次打开已按默认模板生成配置，可直接使用或按需调整。」 / 「这是从模板新生成的配置（复制视图不会自动跟随原视图配置），可直接使用或稍后重配。」</td><td>可关闭（含「从模板重配」「立即配置」）</td></tr>
+<tr><td>配置损坏</td><td>「检测到配置数据损坏，已回退默认排版，并保留了原始数据备份（未改动你的表格数据）。」+ 按钮 <code>重试读取</code></td><td>否</td></tr>
+<tr><td>配置仅本地保存（降级）</td><td>「配置仅本地保存，其他成员看不到你的排版（未满足 US-4 AC2）。」或更具体原因（如「配置存储读取失败，已回退到本地保存，其他成员看不到你的排版。」）</td><td>否（常驻）</td></tr>
+<tr><td>更高版本只读</td><td>「配置由更高版本插件创建，当前为「只读模式」，已忽略未知字段，禁止保存。」</td><td>否</td></tr>
+</tbody></table>
+<h3 id="2-4-空态与错误态-7">2.4 空态与错误态</h3>
+<table><thead><tr><th>场景</th><th>标题</th><th>说明</th><th>动作</th></tr></thead><tbody>
+<tr><td>无记录</td><td><code>暂无记录</code></td><td>该视图在当前筛选条件下没有可见记录。可新增记录，或调整视图筛选。</td><td>——</td></tr>
+<tr><td>无可用字段</td><td><code>当前视图暂无可用字段</code></td><td>请检查字段权限，或在该视图中添加字段后重试。</td><td><code>重试</code></td></tr>
+<tr><td>筛选无结果</td><td><code>当前筛选无结果</code></td><td>没有记录满足当前筛选条件，可调整或清空筛选。</td><td><code>清空筛选</code></td></tr>
+<tr><td>搜索无结果</td><td><code>没有匹配的记录</code></td><td>没有找到与关键词匹配的记录，换个关键词试试。</td><td><code>清空搜索</code></td></tr>
+<tr><td>配置未就绪</td><td><code>配置尚未就绪</code></td><td>正在准备卡片排版配置，请稍候。</td><td>——</td></tr>
+<tr><td>初始化失败</td><td><code>加载失败</code></td><td>显示「步骤：原因」，并附一段只读诊断信息</td><td><code>重试</code></td></tr>
+</tbody></table>
+<hr />
+<h2 id="3-浏览记录-8">3. 浏览记录</h2>
+<h3 id="3-1-卡片结构-9">3.1 卡片结构</h3>
+<p>一张卡片按四个槽位自上而下排列：<strong>标题 / 副标题 / 属性 / 底部</strong>。</p>
+<ul>
+<li>标题、副标题：多字段时用 <code> · </code> 连接；标题单行省略。</li>
+<li>属性：每行「字段名（左）+ 值（右）」；行数受密度与模板上限约束，超出的有值行在末尾显示 <code>+n</code>。</li>
+<li>底部：标签样式。</li>
+<li><strong>无值字段默认隐藏</strong>（不会显示空白行）；整个槽位都没有内容时该槽位自动收合。</li>
+<li>字段被删除时，卡片上自动隐藏该行。</li>
+</ul>
+<h3 id="3-2-密度三档-10">3.2 密度三档</h3>
+<table><thead><tr><th>档位</th><th>卡片最小宽度</th><th>间距</th><th>内边距</th><th>属性区最多行数</th></tr></thead><tbody>
+<tr><td>紧凑</td><td>240px</td><td>12px</td><td>10px</td><td>2</td></tr>
+<tr><td>标准</td><td>280px</td><td>16px</td><td>16px</td><td>3</td></tr>
+<tr><td>宽松</td><td>320px</td><td>20px</td><td>20px</td><td>5</td></tr>
+</tbody></table>
+<h3 id="3-3-计数文案-11">3.3 计数文案</h3>
+<table><thead><tr><th>情况</th><th>文案</th></tr></thead><tbody>
+<tr><td>未收窄</td><td><code>共 12,480 条</code></td></tr>
+<tr><td>收窄且已加载全部</td><td><code>共 12,480 条（已筛选 37 条）</code></td></tr>
+<tr><td>收窄且未加载全部</td><td><code>共 12,480 条 · 已在已加载的 200 条中筛选，命中 37 条</code></td></tr>
+</tbody></table>
+<blockquote>为什么会有「已加载的 N 条」：为流畅浏览，插件<strong>每批加载 200 条</strong>，滚动到底部附近自动续载（加载时网格底部出现骨架行）。因此筛选默认作用在<strong>已加载范围</strong>内 —— 需要全量结果时点状态行的 <code>加载全部并重新筛选</code>。</blockquote>
+<hr />
+<h2 id="4-搜索-12">4. 搜索</h2>
+<ul>
+<li>位置：工具栏中部搜索框；输入即过滤（无需回车）。</li>
+<li><strong>匹配范围</strong>：只匹配<strong>卡片排版中已引用</strong>字段的<strong>显示文本</strong>（即你看到的卡片文字），大小写不敏感、子串匹配。</li>
+<li><strong>不匹配</strong>：未放进卡片的字段；字段的原始 ID / 技术值。</li>
+<li><strong>叠加关系</strong>：先筛选、后搜索，两者同时生效（AND）。</li>
+<li><strong>作用范围</strong>：仅已加载记录；不与服务端交互。</li>
+<li>清空方式：搜索框内 ✕、<code>⋯</code> 菜单的「清空搜索」、无结果空态的「清空搜索」按钮。</li>
+</ul>
+<hr />
+<h2 id="5-字段筛选-13">5. 字段筛选</h2>
+<h3 id="5-1-面板操作-14">5.1 面板操作</h3>
+<ol>
+<li>点工具栏 <code>筛选</code> 打开面板（面板头提示：<code>筛选对已加载记录即时生效</code>）。</li>
+<li>点 <code>+ 添加条件</code> 新增一行；每行三步：<strong>选字段 → 选算子 → 填值</strong>。</li>
+<li>条件数 ≥ 2 时，面板出现 <code>与</code> / <code>或</code> 切换（默认 <code>与</code>，单层组合，不支持嵌套）。</li>
+<li>点 <code>完成</code> <strong>只是收起面板</strong> —— 筛选在填写时已经生效（这点与「应用」按钮的直觉不同，故按钮名刻意叫「完成」）。</li>
+<li><code>清空</code> 一键清除全部条件（无条件时按钮禁用）。</li>
+</ol>
+<h3 id="5-2-选字段-15">5.2 选字段</h3>
+<ul>
+<li>字段下拉支持<strong>模糊查询</strong>：输入关键词即过滤（去首尾空格、大小写不敏感、子串匹配字段名或类型提示）。</li>
+<li>无匹配时显示 <code>无匹配字段</code>。</li>
+<li>下拉只列出<strong>可筛选</strong>的字段；若当前条件用的字段不支持筛选或已被删除，该字段仍会<strong>置顶显示</strong>并标注 <code>（不支持筛选）</code> / <code>（字段已删除）</code>。</li>
+</ul>
+<h3 id="5-3-算子矩阵-按字段类型-16">5.3 算子矩阵（按字段类型）</h3>
+<table><thead><tr><th>字段类型</th><th>可用算子（按界面顺序）</th></tr></thead><tbody>
+<tr><td>文本 / 电话 / 链接 / 条码</td><td>等于、不等于、包含、不包含、为空、不为空</td></tr>
+<tr><td>单选 / 多选</td><td>等于、不等于、包含、不包含、为空、不为空</td></tr>
+<tr><td>数字 / 自动编号 / 货币 / 评分 / 进度</td><td>等于、不等于、大于、大于或等于、小于、小于或等于、为空、不为空</td></tr>
+<tr><td>日期 / 创建时间 / 修改时间</td><td>等于、不等于、<strong>晚于</strong>、<strong>早于</strong>、为空、不为空</td></tr>
+<tr><td>复选框</td><td>等于</td></tr>
+<tr><td>成员 / 创建人 / 修改人 / 群聊</td><td>包含、不包含、为空、不为空</td></tr>
+<tr><td>附件</td><td>为空、不为空</td></tr>
+<tr><td>单向关联 / 双向关联 / 查找引用</td><td>包含、不包含、为空、不为空</td></tr>
+<tr><td>地理位置</td><td>包含、不包含、为空、不为空</td></tr>
+<tr><td>公式</td><td>为空、不为空、包含、不包含</td></tr>
+<tr><td>未收录类型</td><td>不支持筛选（不出现在字段下拉中）</td></tr>
+</tbody></table>
+<p><strong>字段类型提示（界面内 ⓘ 悬停可见）</strong></p>
+<table><thead><tr><th>类型</th><th>提示原文</th></tr></thead><tbody>
+<tr><td>日期类</td><td>仅支持按「某一天」筛选；「晚于」= 次日 0 点及以后，「早于」= 当日 0 点之前</td></tr>
+<tr><td>成员类</td><td>按成员显示名匹配，同名成员可能误命中</td></tr>
+<tr><td>关联类</td><td>按关联记录标题文本匹配</td></tr>
+<tr><td>地理位置</td><td>按地址文本匹配</td></tr>
+<tr><td>公式</td><td>公式字段结果类型不可知，仅支持空值与文本包含判断</td></tr>
+<tr><td>不可筛</td><td>该字段类型不支持筛选</td></tr>
+</tbody></table>
+<h3 id="5-4-值输入控件-17">5.4 值输入控件</h3>
+<table><thead><tr><th>字段类型</th><th>控件</th></tr></thead><tbody>
+<tr><td>文本 / 电话 / 链接 / 条码 / 成员 / 关联 / 查找 / 位置 / 公式</td><td>单行文本框</td></tr>
+<tr><td>数字 / 自动编号 / 货币 / 评分 / 进度</td><td>数字框</td></tr>
+<tr><td>日期 / 创建时间 / 修改时间</td><td>日期选择器</td></tr>
+<tr><td>单选 / 多选</td><td>下拉（选项来自字段配置，首项 <code>请选择</code>）</td></tr>
+<tr><td>复选框</td><td>下拉 <code>是</code> / <code>否</code></td></tr>
+<tr><td>「为空」「不为空」及附件类型</td><td>不需要填值（不显示输入框）</td></tr>
+</tbody></table>
+<h3 id="5-5-无效条件如何提示-重要-18">5.5 无效条件如何提示（重要）</h3>
+<p>条件行若不会生效，会整行标红并给出<strong>具体原因</strong>（按优先级）：</p>
+<table><thead><tr><th>原因</th><th>文案</th></tr></thead><tbody>
+<tr><td>算子未知</td><td><code>该条件不会生效：未知算子「xxx」</code></td></tr>
+<tr><td>类型 × 算子不匹配（含字段已删除）</td><td><code>该条件不会生效：所选算子不适用于此字段类型</code></td></tr>
+<tr><td>值未填写</td><td><code>该条件不会生效：尚未填写筛选值</code></td></tr>
+</tbody></table>
+<p>同时面板顶部出现汇总：<code>⚠ 有 N 个条件未生效，已按其余条件筛选</code>；状态行追加以括号后缀 <code>（其中 N 个条件未生效）</code>。</p>
+<h3 id="5-6-空值条件不会隐藏数据-设计保证-19">5.6 「空值条件不会隐藏数据」（设计保证）</h3>
+<p>新增条件行<strong>不会预填值</strong>。在你填写之前：</p>
+<ul>
+<li>该条件被标红提示 <code>尚未填写筛选值</code>；</li>
+<li><strong>卡片数量不变</strong>（不会因为一条空条件把记录全部筛掉）；</li>
+<li>若<strong>所有</strong>条件都未生效，则视为「不筛选」，显示全部记录，并提示「N 个条件未生效」。</li>
+<li><code>为空</code> / <code>不为空</code> 两个算子永远有效，不需要填值。</li>
+</ul>
+<blockquote>这条规则的意义：宁可筛选暂不生效，也绝不让记录被静默隐藏。</blockquote>
+<h3 id="5-7-与原生表格筛选的关系-20">5.7 与原生表格筛选的关系</h3>
+<p>本插件的筛选<strong>完全在插件内计算</strong>，不会写回、也不会改变表格视图的原生筛选设置；两者互不影响。排序则直接沿用原生视图的排序结果。</p>
+<hr />
+<h2 id="6-查看记录详情-21">6. 查看记录详情</h2>
+<ul>
+<li><strong>打开</strong>：点击卡片任意位置；或卡片获得焦点后按 <code>Enter</code> / <code>空格</code>。（悬停只弹轻量气泡，不打开抽屉。）</li>
+<li><strong>悬浮预览</strong>：悬停 150ms 后弹出气泡，内容为标题 + 属性区前 4 行 + 提示 <code>点击卡片查看详情</code>。</li>
+<li><strong>详情内容</strong>：按「文档排版」配置渲染，形态为<strong>单张连续长页</strong>，内容过长时由抽屉内滚动条滚动（不再分页、无页码）。</li>
+<li><strong>顶部工具</strong>：<code>适应宽度</code>、<code>－</code>、缩放百分比、<code>＋</code>、<code>全屏</code> / <code>退出全屏</code>、<code>✕</code>。</li>
+<li><strong>抽屉尺寸</strong>：默认 860px，可拖拽在 560px ~ 满宽之间调整（底部提示：<code>560px ~ 满宽 · 缩放 75%~150%</code>）。</li>
+<li><strong>关闭</strong>：<code>✕</code> 按钮、点击遮罩、或按 <code>Esc</code>（全屏时 <code>Esc</code> 先退出全屏，再按一次关闭）；关闭后焦点回到原卡片。</li>
+<li><strong>切换记录</strong>：抽屉内没有「上一条 / 下一条」，需关闭后点击其它卡片。</li>
+<li><strong>异常情况</strong>：记录不存在时显示 <code>记录不存在或已被删除。</code>；文档无可排版内容时显示 <code>暂无可排版的文档内容。</code>；字段类型不支持时该字段显示 <code>该字段类型暂不支持</code>；字段已被删除时显示 <code>—</code> 占位。</li>
+</ul>
+<hr />
+<h2 id="7-排版编辑器-卡片排版-22">7. 排版编辑器 · 卡片排版</h2>
+<blockquote>入口：工具栏 <code>⚙ 配置</code> → 顶栏 <code>卡片排版</code> 标签页。整个编辑器为三栏：<strong>左·字段池 / 中·预览与槽位 / 右·属性</strong>。</blockquote>
+<h3 id="7-1-拖拽绑定字段-23">7.1 拖拽绑定字段</h3>
+<ol>
+<li>左栏「字段池」把字段分为三组：<code>已使用</code> / <code>未使用</code> / <code>不支持类型</code>。</li>
+<li>从字段池拖动字段到中间任一槽位投放区松手即可落位；槽位内可<strong>拖动排序</strong>，chip 上 <code>✕</code> 移除。</li>
+<li>一个字段<strong>至多出现在一个槽位</strong>；把已在别处的字段再拖过去，等于「移动」而非复制。</li>
+<li><code>不支持类型</code> 组内的字段无法拖入；点击会提示「<code>字段名</code>：该字段类型暂不支持在卡片中呈现」，并可用「查看说明」查看原因。</li>
+<li>中间「预览」区使用<strong>样例数据</strong>渲染，提示文字：「预览使用样例数据；实际卡片内容以你的记录为准。」</li>
+</ol>
+<h3 id="7-2-槽位配置-右栏-槽位配置-24">7.2 槽位配置（右栏 · 槽位配置）</h3>
+<ul>
+<li>四个槽位：<code>标题</code> / <code>副标题</code> / <code>属性</code> / <code>底部</code>，每个显示当前字段数（如「2 个字段」）。</li>
+<li><code>显示该槽位</code> 复选框：可整体隐藏某槽位。</li>
+<li><code>排列</code>：<code>横向</code> / <code>纵向</code>（纵向适合清单式副标题）。</li>
+</ul>
+<h3 id="7-3-卡片模板-密度-主题-25">7.3 卡片模板 / 密度 / 主题</h3>
+<table><thead><tr><th>分区</th><th>可配置项</th><th>选项</th></tr></thead><tbody>
+<tr><td>卡片模板</td><td>版式预设</td><td>套用后整体替换槽位配置，<strong>保留已用字段</strong></td></tr>
+<tr><td>密度</td><td>密度档位</td><td><code>紧凑</code> / <code>标准</code> / <code>宽松</code></td></tr>
+<tr><td>主题</td><td>主色</td><td>6 色：#3370FF / #245BDB / #14C9C9 / #00B42A / #FF7D00 / #F53F3F</td></tr>
+<tr><td>主题</td><td>圆角</td><td>4 / 6 / 8 / 12</td></tr>
+<tr><td>主题</td><td>阴影</td><td><code>无</code> / <code>弱</code> / <code>中</code> / <code>强</code></td></tr>
+<tr><td>主题</td><td>标题字重</td><td>400 / 500 / 600 / 700</td></tr>
+<tr><td>主题</td><td>字号缩放</td><td>0.85× ~ 1.3×</td></tr>
+</tbody></table>
+<h3 id="7-4-条件高亮-26">7.4 条件高亮</h3>
+<ul>
+<li>点 <code>+ 添加规则</code> 新增规则；每条规则可配：<code>启用规则</code>、<code>规则名称</code>、<code>目标</code>（<code>整卡边框</code> / <code>字段：xxx</code> / <code>标签：xxx</code>）、<code>满足</code>（<code>全部满足</code> / <code>任一满足</code>）、若干条件行、<code>样式</code>（5 色）、<code>优先级</code>（0–999）。</li>
+<li>条件行 = 字段 + 运算符 + 值；运算符：等于、不等于、大于、大于等于、小于、小于等于、包含、不包含、为空、不为空、早于、晚于（后两者用于日期）。</li>
+<li>空态提示：「尚未配置高亮规则。可基于字段值让卡片边框或字段着色。」</li>
+</ul>
+<h3 id="7-5-草稿-撤销与保存-27">7.5 草稿、撤销与保存</h3>
+<table><thead><tr><th>操作</th><th>行为</th></tr></thead><tbody>
+<tr><td>改动</td><td><strong>实时写入草稿</strong>并实时预览，顶栏出现 <code>未保存</code> 标记</td></tr>
+<tr><td><code>撤销</code></td><td>逐步回退（最多 50 步）；无可撤销时提示「没有可撤销的操作」</td></tr>
+<tr><td><code>保存</code></td><td>保存到配置并提示「已保存」，随后关闭编辑器</td></tr>
+<tr><td><code>取消</code> / 关闭</td><td>若有未保存改动，弹出确认：「放弃未保存的修改？」/「你有尚未保存的排版改动，关闭后将丢失这些修改。」→ <code>继续编辑</code> / <code>放弃并关闭</code></td></tr>
+</tbody></table>
+<blockquote>「卡片排版」与「文档排版」两套草稿互不影响，「取消」只丢弃当前标签页的改动。</blockquote>
+<hr />
+<h2 id="8-排版编辑器-文档排版-28">8. 排版编辑器 · 文档排版</h2>
+<blockquote>顶栏 <code>文档排版</code> 标签页。「文档排版」即<strong>卡片详情的排版</strong> —— 你在详情里看到的就是这里配置的。</blockquote>
+<h3 id="8-1-两种模板来源-29">8.1 两种模板来源</h3>
+<p>编辑器最上方「模板来源」横栏二选一：</p>
+<table><thead><tr><th>来源</th><th>说明</th></tr></thead><tbody>
+<tr><td><code>可视化排版</code></td><td>用左侧区块库拖拽编排（下方 §8.2 ~ §8.4）</td></tr>
+<tr><td><code>导入 docx</code></td><td>上传 Word 模板并用占位符读字段（见 §9）</td></tr>
+</tbody></table>
+<p>切换来源<strong>只改变详情用哪套模板</strong>，已上传的模板会原样保留。</p>
+<h3 id="8-2-区块库-12-类-5-组-30">8.2 区块库（12 类，5 组）</h3>
+<table><thead><tr><th>分组</th><th>区块</th><th>用途摘要</th></tr></thead><tbody>
+<tr><td>文本</td><td>标题 / 段落 / 静态文本</td><td>标题层级（可静态或绑定字段）、段落（可绑定字段）、支持 <code><strong>粗体</strong></code>、<code>*斜体*</code>、换行与 <code>- 列表</code> 的富文本</td></tr>
+<tr><td>字段</td><td>键值网格 / 字段清单 / 标签行</td><td>最常用的「字段名: 值」网格、逐项字段清单、标签/徽章行</td></tr>
+<tr><td>媒体</td><td>图片 / 表格</td><td>附件取图（首张/全部/指定序号，可设宽高与图注）、表格（列、行来源=当前记录或关联记录、表头、斑马纹、最大行数）</td></tr>
+<tr><td>结构</td><td>分隔线 / 间距 / 强制分页</td><td>线宽线型、空白高度、在此处强制结束当前页</td></tr>
+<tr><td>元信息</td><td>页脚元信息</td><td>创建人 / 创建时间 / 修改人 / 修改时间 / 记录 ID</td></tr>
+</tbody></table>
+<h3 id="8-3-画布操作-31">8.3 画布操作</h3>
+<ul>
+<li><strong>从左侧拖入</strong>区块：区块之间与首尾都有插入位置（画布底部提示：<code>从左侧拖入区块 · 拖动区块可排序 · 点击区块编辑属性</code>）。</li>
+<li><strong>拖动排序</strong>：拖动已有区块在区块间移动。</li>
+<li><strong>点击选中</strong>：点区块即选中，右栏切换到它的属性。</li>
+<li><strong>删除</strong>：在右栏属性面板底部点 <code>删除该区块</code>。</li>
+<li>状态栏显示 <code>已用 n 块 / 插入槽 n+1</code>。</li>
+<li>画布中的条件显隐区块若在样例数据下不渲染，会提示「该区块在当前示例数据下不渲染」。</li>
+</ul>
+<h3 id="8-4-右侧属性面板-三折叠-32">8.4 右侧属性面板（三折叠）</h3>
+<ol>
+<li><strong>区块属性</strong>：未选中时提示「未选中区块 / 在中间画布中点选一个区块，即可编辑它的属性。」</li>
+</ol>
+<ul>
+<li>通用（所有区块）：<code>分页行为</code>（<code>允许跨页</code> / <code>整体不跨页</code>）、<code>对齐</code>（左/居中/右/两端）、<code>上间距</code>、<code>下间距</code>、<code>条件显隐</code>（仅「首字段非空」时显示该块）、<code>备注</code>（仅编辑器内部标识）。</li>
+<li>专属：各类区块有各自选项（列数、字段行、标签列宽、斑马纹、隐藏空行、主色……），字段行支持 <code>添加一行</code> / <code>移除</code>。</li>
+</ul>
+<ol>
+<li><strong>页面设置</strong>：<code>纸张</code>（A4 / A5 / Letter）、<code>朝向</code>（<code>纵向</code> / <code>横向</code>）、<code>页边距 (mm)</code>（上/右/下/左）。</li>
+<p>&gt; 说明：<strong>页眉 / 页码 / 页脚配置已按需求移除</strong>；纸张与页边距仍然影响正文宽度，请按需设置。</p>
+<li><strong>主题</strong>：字体（系统默认/宋体/楷体/等宽）、基准字号、行高、字阶（H1/H2/H3 倍率）、标题字重、区块间距、首行缩进、主色、正文色/弱化色/分隔线色。</li>
+</ol>
+<hr />
+<h2 id="9-导入-docx-模板-33">9. 导入 .docx 模板</h2>
+<h3 id="9-1-上传与规则-34">9.1 上传与规则</h3>
+<ol>
+<li>「模板来源」选 <code>导入 docx</code> → 点 <code>选择 .docx 模板</code>。</li>
+<li>规则：</li>
+</ol>
+<ul>
+<li>仅接受 <strong>.docx</strong>（其它类型提示：<code>仅支持 .docx 模板文件（当前文件：xxx）</code>）。</li>
+<li>单个模板 <strong>≤ 1MB</strong>（超限提示形如：<code>模板 33.0KB（33792 字节），超出上限 1024.0KB（1048576 字节），请压缩模板后重试</code>）。</li>
+<li>上传后立即<strong>体检</strong>（不等保存），体检结果直接显示在下方。</li>
+</ul>
+<ol>
+<li>已上传后按钮变为 <code>重新选择 .docx</code>；当前模板以 <code>文件名（体积）</code> 形式展示（如 <code>合同模板.docx（28.4KB）</code>）。</li>
+</ol>
+<h3 id="9-2-占位符语法-35">9.2 占位符语法</h3>
+<table><thead><tr><th>写法</th><th>含义</th></tr></thead><tbody>
+<tr><td><code>{字段名}</code></td><td>插入该字段的值（按数据表格式显示）</td></tr>
+<tr><td><code>{#字段名}…{/字段名}</code></td><td>循环/明细段（<strong>本期暂不可用</strong>，见 §12）</td></tr>
+</tbody></table>
+<p>规则与边界：</p>
+<ul>
+<li>字段名<strong>前后空格会被忽略</strong>；<strong>大小写敏感</strong>；<strong>精确匹配</strong>，不做模糊/近似匹配 —— 写错一个字就会进「未匹配」而不是猜。</li>
+<li>无法配对的 <code>{</code> 或 <code>}</code>、空标签 <code>{}</code> / <code>{  }</code>、空名标签 <code>{#}</code> / <code>{/}</code> 一律<strong>按普通文本处理</strong>，不会吞掉你文档里的字符。</li>
+<li>不支持 <code>^</code>（反向段）、<code>-</code>（局部段）、<code>=</code>（换分隔符）等高级前缀写法；这类内容会被当作「名字以此开头的占位符」并在体检中报「未匹配」。</li>
+<li><strong>字段重名</strong>：若表中有两个同名字段，该占位符<strong>不会</strong>取第一个，而是留空并在体检中报「重名冲突」。</li>
+</ul>
+<h3 id="9-3-体检结果怎么看-36">9.3 体检结果怎么看</h3>
+<table><thead><tr><th>区域</th><th>文案</th><th>含义与处理</th></tr></thead><tbody>
+<tr><td>匹配成功</td><td><code>匹配字段 N 个</code></td><td>正常（绿色）</td></tr>
+<tr><td>未匹配</td><td><code>模板里写了、但没有对应字段的占位符（导出后是空白，请核对字段名）</code> + 占位符原文</td><td>逐条核对字段名拼写/空格/大小写</td></tr>
+<tr><td>重名冲突</td><td><code>字段重名导致无法确定用哪个字段（已留空，不会猜）</code> / <code>源字段重名冲突（无法确定用哪个字段）</code> + 候选字段 id</td><td>请先重命名表格字段，使名称唯一</td></tr>
+<tr><td>循环未闭合</td><td><code>循环未闭合（写了开始标签，但没有对应的结束标签）</code> + <code>{#x} 缺少 {/x}</code></td><td>补上结束标签</td></tr>
+<tr><td>多余结束标签</td><td><code>多余的循环结束标签（没有对应的开始标签）</code> + <code>{/x} 缺少 {#x}</code></td><td>删掉或用错位处修正</td></tr>
+<tr><td>未引用字段</td><td><code>模板未引用的字段：A、B</code></td><td>提示性信息（弱化色），不影响导出</td></tr>
+</tbody></table>
+<blockquote>体检的价值：<strong>提前告诉你哪些占位符会渲染成空白</strong> —— 否则文档看起来「有内容」，但那些位置悄悄是空的。</blockquote>
+<h3 id="9-4-检测存储容量-可选-排障用-37">9.4 检测存储容量（可选，排障用）</h3>
+<ul>
+<li>入口：「导入 docx」分支的 <code>检测存储容量</code> 按钮。悬停说明：「在专用 key 上试写不同体积，实测当前平台可写入的最大模板字节数（不影响你的数据）」。</li>
+<li>行为：逐档试写 32KB / 64KB / 128KB / 256KB / 512KB / 1MB，遇首个失败即停止；结果形如：</li>
+</ul>
+<p>``<code> 存储容量探测 最大可写入 64.0KB（65536 字节） 32.0KB（32768 字节）：成功 64.0KB（65536 字节）：成功 128.0KB（131072 字节）：失败（set block entity error） </code>``</p>
+<ul>
+<li><strong>安全说明</strong>：探针只读写专用 key（<code>cbv:probe:</code> 前缀）并在结束时清理，<strong>绝不触碰你的排版配置与其它数据</strong>。</li>
+</ul>
+<h3 id="9-5-详情侧渲染说明-38">9.5 详情侧渲染说明</h3>
+<ul>
+<li>来源为 <code>导入 docx</code> 时，详情按模板<strong>保真渲染</strong>：</li>
+<li>生成中显示 <code>正在生成文档…</code>；</li>
+<li>页面的宽度与页边距<strong>以模板自带的为准</strong>（这是刻意设计：套用插件纸张设置等于改版你的 Word 模板）；</li>
+<li>缩放只做等比视觉缩放，不改变模板版式。</li>
+<li>若配置里没有模板数据，详情提示：<code>未找到导入的模板：当前文档来源为「导入的 docx」，但配置里没有模板数据。请在「文档排版」中重新上传模板。</code></li>
+</ul>
+<hr />
+<h2 id="10-配置保存与共享-39">10. 配置保存与共享</h2>
+<table><thead><tr><th>项</th><th>说明</th></tr></thead><tbody>
+<tr><td>存储位置</td><td>插件配置按<strong>视图</strong>隔离（同文档不同视图互不覆盖）</td></tr>
+<tr><td>共享范围</td><td>飞书存储可用时，<strong>同一文档、同一视图的成员共用一套配置</strong>；若降级为本地保存，则<strong>仅本机可见</strong>（页面顶部会有常驻提示）</td></tr>
+<tr><td>体积上限</td><td><strong>64KB</strong>；接近上限会提示，超出则拒绝保存：<code>配置体积约 72KB，已超过 64KB 上限，请精简区块或高亮规则后再保存</code></td></tr>
+<tr><td>模板字节</td><td>不计入 64KB：模板另行分块存储（主配置只留引用与完整性校验信息）</td></tr>
+<tr><td>无权限</td><td><code>⚙ 配置</code> 禁用；即便进入编辑也无法保存（提示「仅查看权限，无法保存配置」）</td></tr>
+<tr><td>更高版本配置</td><td>进入只读模式，保存被拒绝：<code>当前配置由更高版本的插件写入，为避免覆盖较新数据，本版本仅支持只读浏览，暂不能保存。</code></td></tr>
+<tr><td>配置损坏</td><td>回退默认排版 + 保留原始数据备份，横幅提示「未改动你的表格数据」并提供 <code>重试读取</code></td></tr>
+</tbody></table>
+<hr />
+<h2 id="11-常见问题-faq-40">11. 常见问题（FAQ）</h2>
+<p><strong>Q1：为什么筛选只筛了「已加载的 200 条」？</strong> 为流畅浏览，插件分批加载（每批 200 条）。需要全量结果时，点状态行的 <code>加载全部并重新筛选</code>。</p>
+<p><strong>Q2：我点了筛选面板里的「完成」，为什么筛选没有应用？</strong> 「完成」只是收起面板 —— 筛选在你填写时就已即时生效。所以按钮名才不叫「应用」。</p>
+<p><strong>Q3：我新加了一条筛选条件还没填值，卡片怎么没变化？</strong> 这是<strong>故意设计</strong>：未填值的条件被判为「未生效」并跳过，记录保持可见（你会看到行内红字「尚未填写筛选值」）。填上值后才参与筛选。</p>
+<p><strong>Q4：条件行标红了，什么意思？</strong> 说明该条件当前<strong>不会生效</strong>，红字会告诉你具体原因：值没填 / 算子不适用此字段类型 / 算子未知。此时其余条件仍照常生效，状态行会注明「其中 N 个条件未生效」。</p>
+<p><strong>Q5：搜索为什么搜不到某个字段的内容？</strong> 搜索只匹配<strong>已放入卡片</strong>的字段显示文本。若该字段没被拖进任何槽位，请先把它加进卡片。</p>
+<p><strong>Q6：详情里的字体/纸张和我配置的不一样？</strong> 如果你用的是<strong>导入的 docx 模板</strong>，详情会以模板自带的页面尺寸与页边距渲染（保真优先）；只有「可视化排版」来源才应用 §8.4 的页面设置。</p>
+<p><strong>Q7：模板里的字段没显示出来（位置是空白）？</strong> 去看「模板体检」的「未匹配」列表 —— 大概率是字段名拼写/空格/大小写对不上；也可能是表格里有重名字段（会明确报重名冲突）。占位符按字段名<strong>精确匹配</strong>，不会猜。</p>
+<p><strong>Q8：导入大模板很慢或失败怎么办？</strong> 先点 <code>检测存储容量</code> 看当前平台可写入到多大（常见档位边界是 64KB）。若失败提示里带 <code>（可能是平台单键存储上限导致，请压缩模板后重试）</code>，请压缩模板（例如去掉大图、精简样式）后重试。</p>
+<p><strong>Q9：为什么别人看不到我改的排版？</strong> 看页面顶部是否有「配置仅本地保存」提示 —— 说明当前环境的飞书存储不可用，配置降级保存在本机。请在<strong>飞书客户端</strong>中打开该文档重试。</p>
+<p><strong>Q10：卡片上的字段比我配的少 / 多出一个「+2」？</strong> 属性区受密度档位（紧凑 2 / 标准 3 / 宽松 5 行）与模板上限共同约束，超出的<strong>有值行</strong>会被折叠为 <code>+n</code> 提示。调大密度或改用属性更多的模板即可。</p>
+<p><strong>Q11：这个插件会不会改我的表格数据或原生筛选？</strong> 不会。插件<strong>只读</strong>表格数据，<strong>不写回</strong>数据，也<strong>不改写</strong>视图的原生筛选/排序；唯一会写入的是插件自己的排版配置。</p>
+<hr />
+<h2 id="12-已知限制-请留意-41">12. 已知限制（请留意）</h2>
+<ol>
+<li><strong>循环/明细段占位符暂不可用</strong>：<code>{#字段名}…{/字段名}</code> 当前未接线子记录读取，渲染时会展开为空（体检不会因此报错）。明细行、一对多子表建议暂改为逐个字段展示。</li>
+<li><strong>打印导出未包含在本期</strong>：详情为屏幕阅读形态，不含打印/导出 PDF 能力（后续规划）。</li>
+<li><strong>xlsx 模板未支持</strong>：本期模板仅 .docx（后续规划）。</li>
+<li><strong>页眉 / 页码 / 页脚不再可配</strong>：详情已改为单张连续长页；历史配置中的相关字段会保留但不再影响显示。</li>
+<li><strong>详情抽屉不能在记录间切换</strong>：没有「上一条/下一条」，需关闭后另点卡片。</li>
+<li><strong>筛选/搜索作用于已加载范围</strong>：需要全量请使用 <code>加载全部并重新筛选</code>。</li>
+<li><strong>单一 AND/OR 层级</strong>：筛选条件支持一层「与/或」，不支持条件嵌套分组。</li>
+<li><strong>悬浮预览内容有限</strong>：仅标题 + 属性区前 4 行。</li>
+<li><strong>排序不可在插件内调整</strong>：沿用原生视图排序（插件内只提供说明）。</li>
+<li><strong>部分文案细节待优化</strong>：</li>
+</ol>
+<ul>
+<li>模板体积超限提示中的上限写作 <code>1024.0KB</code>（而非 <code>1.0MB</code>）；</li>
+<li>模板写入失败的提示会复用时出现「读取模板文件失败：写入模板块失败：…」的双重前缀；</li>
+<li>工具栏「排序」说明面板中会出现字面星号（<code><strong>原生排序</strong></code>）。</li>
+<p>以上均为文案层面问题，不影响功能，已记录待修。</p>
+</ul></article>
+  </main>
+</div>
+<div class="actions"><button onclick="window.print()">打印 / 导出 PDF</button></div>
+</body>
+</html>

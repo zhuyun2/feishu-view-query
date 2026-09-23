@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 import { Card } from '@/components/card/Card';
 import { defaultDensity, defaultTheme } from '@/config/defaults';
 import {
@@ -72,11 +72,11 @@ function layout(overrides: Partial<Record<SlotId, SlotConfig>> = {}): CardLayout
   };
 }
 
-function record(fields: Record<string, unknown>): IRecord {
-  return { recordId: 'r1', fields } as unknown as IRecord;
+function record(fields: Record<string, unknown>): SdkRecord {
+  return { recordId: 'r1', fields } as unknown as SdkRecord;
 }
 
-function render(l: CardLayoutConfig, r: IRecord, attributesRows = 3): string {
+function render(l: CardLayoutConfig, r: SdkRecord, attributesRows = 3): string {
   return renderToStaticMarkup(
     createElement(Card, {
       record: r,

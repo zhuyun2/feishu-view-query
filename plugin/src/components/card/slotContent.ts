@@ -5,7 +5,7 @@
  * 与渲染层同源：同样经 `normalize()`，保证「判定为空」与「渲染为空」一致。
  * 字段元数据缺失（字段被删除）→ 视为无内容（自动隐藏，03 §12）。
  */
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 import type { FieldPlacement, SlotConfig } from '@/config/types';
 import type { FieldMetaLite } from '@/fields/fieldTypes';
 import { normalize } from '@/fields/normalize';
@@ -16,7 +16,7 @@ export type FieldsById = Record<string, FieldMetaLite>;
 /** 单个字段落位是否有内容 */
 export function placementHasContent(
   placement: FieldPlacement,
-  record: IRecord,
+  record: SdkRecord,
   fieldsById: FieldsById,
 ): boolean {
   const meta = fieldsById[placement.fieldId];
@@ -33,7 +33,7 @@ export function placementHasContent(
 }
 
 /** 槽位内是否有任意一个有内容的落位（按 order 排序后判定） */
-export function slotHasContent(slot: SlotConfig, record: IRecord, fieldsById: FieldsById): boolean {
+export function slotHasContent(slot: SlotConfig, record: SdkRecord, fieldsById: FieldsById): boolean {
   if (!slot.visible || slot.placements.length === 0) return false;
   return slot.placements.some((placement) => placementHasContent(placement, record, fieldsById));
 }
@@ -45,7 +45,7 @@ export function labelOf(placement: FieldPlacement, fieldsById: FieldsById): stri
 }
 
 /** 取卡片 aria-label 用的标题文本（找不到则回落 recordId 之外的通用文案，不外泄 id） */
-export function recordTitleText(layout: { slots: Record<string, SlotConfig> }, record: IRecord, fieldsById: FieldsById): string {
+export function recordTitleText(layout: { slots: Record<string, SlotConfig> }, record: SdkRecord, fieldsById: FieldsById): string {
   const titleSlot = layout.slots.title;
   if (titleSlot) {
     const sorted = [...titleSlot.placements].sort((a, b) => a.order - b.order);

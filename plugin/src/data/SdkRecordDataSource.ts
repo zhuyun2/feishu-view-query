@@ -5,12 +5,12 @@
  * 页级缓存保证滚动增量加载 / 刷新时命中零请求。
  *
  * 已核对 `@lark-base-open/js-sdk@1.0.2`：
- *  - `ITable.getRecordsByPage(params)`，其中 `params.pageToken?: number`；
- *  - `ITable.getViewById(id): Promise<IView>`（无 `getView`）；
- *  - `IView.getVisibleRecordIdList(): Promise<string[]>`。
+ *  - `SdkTable.getRecordsByPage(params)`，其中 `params.pageToken?: number`；
+ *  - `SdkTable.getViewById(id): Promise<SdkView>`（无 `getView`）；
+ *  - `SdkView.getVisibleRecordIdList(): Promise<string[]>`。
  * 本层对外使用「不透明字符串游标」，在边界处与 SDK 的数字游标互转。
  */
-import type { IRecord, ITable } from '@lark-base-open/js-sdk';
+import type { SdkRecord, SdkTable } from '@/sdk/port';
 import { MAX_PAGE_SIZE } from '@/constants';
 import { logError } from '@/utils/log';
 import { RecordCache } from './RecordCache';
@@ -41,11 +41,11 @@ function fromSdkPageToken(token: unknown): string | null {
 }
 
 export class SdkRecordDataSource implements RecordDataSource {
-  private readonly table: ITable;
+  private readonly table: SdkTable;
   private readonly viewId: string;
   private readonly cache: RecordCache;
 
-  constructor(table: ITable, viewId: string, cache: RecordCache = new RecordCache()) {
+  constructor(table: SdkTable, viewId: string, cache: RecordCache = new RecordCache()) {
     this.table = table;
     this.viewId = viewId;
     this.cache = cache;
@@ -65,7 +65,7 @@ export class SdkRecordDataSource implements RecordDataSource {
         pageToken: toSdkPageToken(query.pageToken),
       })) as unknown as RecordsByPageResponse;
 
-      const records = Array.isArray(response.records) ? (response.records as IRecord[]) : [];
+      const records = Array.isArray(response.records) ? (response.records as SdkRecord[]) : [];
       const pageToken = fromSdkPageToken(response.pageToken);
       const hasMore = typeof response.hasMore === 'boolean' ? response.hasMore : pageToken !== null;
 
@@ -78,12 +78,12 @@ export class SdkRecordDataSource implements RecordDataSource {
     }
   }
 
-  async loadRecord(recordId: string): Promise<IRecord | null> {
+  async loadRecord(recordId: string): Promise<SdkRecord | null> {
     if (recordId === '') return null;
     const cached = this.cache.getRecord(recordId);
     if (cached) return cached;
     try {
-      const record = (await this.table.getRecordById(recordId)) as unknown as IRecord | null;
+      const record = (await this.table.getRecordById(recordId)) as unknown as SdkRecord | null;
       if (record) this.cache.putRecord(recordId, record);
       return record;
     } catch (err) {
@@ -94,7 +94,7 @@ export class SdkRecordDataSource implements RecordDataSource {
 
   async getVisibleRecordIds(): Promise<string[]> {
     try {
-      // 已核对 @lark-base-open/js-sdk@1.0.2：ITable 提供 getViewById(id)（无 getView）
+      // 已核对 @lark-base-open/js-sdk@1.0.2：SdkTable 提供 getViewById(id)（无 getView）
       const view = await this.table.getViewById(this.viewId);
       const ids = (await view.getVisibleRecordIdList()) as unknown;
       if (!Array.isArray(ids)) return [];

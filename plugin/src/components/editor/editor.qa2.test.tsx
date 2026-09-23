@@ -235,15 +235,31 @@ describe('T11 · ConfigDrawer（沉浸式三栏，非抽屉）', () => {
     unmount();
   });
 
-  it('切「文档排版」→ M2 仅入口占位（不假装已实现 A4 分页）', () => {
+  it('切「文档排版」→ 渲染真实文档编辑器（占位已移除 · M3-T12 反转）', () => {
     const { container, unmount } = mount(createElement(ConfigDrawer));
     const docTab = findByText(container, 'button', '文档排版') as HTMLElement;
     act(() => {
       docTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
+
+    // ── 正面锚点（反转的前提，防「目标消失 → 恒真」）──
+    // T10 已把占位替换为真实三栏编辑器；若有人把 doc 分支改回占位，
+    // 以下结构性锚点会全部落空 → 本用例立刻变红。
+    expect(container.querySelector('[data-doc-editor="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="doc-canvas"]')).not.toBeNull();
+    expect(container.querySelector('.cbv-docprops')).not.toBeNull();
+    // 左栏区块库 5 组 / 12 类（漏一类即红）
+    expect(container.querySelectorAll('.cbv-blocklib__group').length).toBe(5);
+    expect(container.querySelectorAll('.cbv-blocklib__item').length).toBe(12);
+
+    // ── 否定式断言（配正面锚点）：占位文案与占位返回按钮彻底移除 ──
     const html = container.innerHTML;
-    expect(html).toContain('文档排版即将上线');
-    expect(html).not.toContain('A4');
+    expect(html).not.toContain('文档排版即将上线');
+    expect(html).not.toContain('将在下个版本提供');
+    expect(html).not.toContain('返回卡片排版');
+    // 对照：card 模式的字段池文案此时不应出现（确认确实处于 doc 分支）
+    expect(html).not.toContain('未使用');
+
     unmount();
   });
 

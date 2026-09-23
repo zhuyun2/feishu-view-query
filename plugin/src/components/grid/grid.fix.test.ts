@@ -6,7 +6,7 @@
  * **纯逻辑**正确性 —— 这是可在逻辑层确定的部分。
  */
 import { describe, expect, it, vi } from 'vitest';
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 import { RecordCache } from '@/data/RecordCache';
 import type { PageResult } from '@/data/RecordDataSource';
 import { appendUniqueRecords, PagedRecordController } from '@/data/recordPages';
@@ -18,8 +18,8 @@ import {
 } from '@/components/grid/gridMath';
 import { selectRowCount } from '@/state/selectors';
 
-function rec(index: number): IRecord {
-  return { recordId: `r${index}`, fields: {} } as unknown as IRecord;
+function rec(index: number): SdkRecord {
+  return { recordId: `r${index}`, fields: {} } as unknown as SdkRecord;
 }
 
 const TOTAL = 12_000;

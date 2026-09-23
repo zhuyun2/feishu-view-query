@@ -9,7 +9,7 @@
  *  - `bridge.getEnv(): Promise<Env>`（Env.product: 'lark' | 'feishu'）
  *  - `bridge.onThemeChange(cb: (ev: IEventCbCtx<ThemeModeCtx>) => void): () => void`
  */
-import { bitable } from '@lark-base-open/js-sdk';
+import { bitable } from '@lark-opdev/block-bitable-api';
 import { getAppId, getSelection } from './base';
 import { logError } from '@/utils/log';
 

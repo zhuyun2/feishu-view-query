@@ -19,10 +19,12 @@ import type {
   DetailConfig,
   DrawerConfig,
   HighlightRule,
+  ImportedDocx,
   SlotConfig,
   SlotId,
   StyleTheme,
 } from './types';
+import { sanitizeFilterConfig } from '@/filter/sanitize';
 
 /** 迁移失败（不可恢复的输入结构） */
 export class MigrationError extends Error {
@@ -34,6 +36,55 @@ export class MigrationError extends Error {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * ⭐ 纯增（「docx 模板导入」存储层）：净化导入的 docx 模板。
+ *
+ * `assertCardViewConfig()` 会**按字段逐个重建** `detail`（未知字段被丢弃，是「读新降级」
+ * 的既有语义）。若不在此显式搬运 `docSource` / `importedDocx`，导入的 docx 模板会在
+ * **每次读取时被静默抹掉**，整个功能失效 —— 故这里是最小且必要的透传点。
+ *
+ * 结构净化（不抛错）：非对象 → undefined；各字段类型不符 → 归为安全默认值。
+ *
+ * ⭐ 1MB / 分块改造后：`importedDocx` 只承载**引用 + 完整性**（`templateId` / `chunkCount` /
+ * `chunkSize` / `contentHash`）+ 遗留内联 `bytesBase64`。这里**逐个纯增透传**这些可选字段
+ * （漏掉任一 → 重载后分块引用消失，模板在读取侧被判「缺失/无效」）。缺 `templateId` 等
+ * 分块字段的旧配置**不崩**：可选字段一律「有则透传、无则不写」。
+ */
+function sanitizeImportedDocx(value: unknown): ImportedDocx | undefined {
+  if (!isPlainObject(value)) return undefined;
+
+  const readString = (key: string): string | undefined =>
+    typeof value[key] === 'string' ? (value[key] as string) : undefined;
+  const readNumber = (key: string): number | undefined => {
+    const raw = value[key];
+    return typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined;
+  };
+
+  const sanitized: ImportedDocx = {
+    fileName: typeof value.fileName === 'string' ? value.fileName : '',
+    sizeBytes:
+      typeof value.sizeBytes === 'number' && Number.isFinite(value.sizeBytes) ? value.sizeBytes : 0,
+    uploadedAt:
+      typeof value.uploadedAt === 'number' && Number.isFinite(value.uploadedAt)
+        ? value.uploadedAt
+        : 0,
+  };
+
+  // 可选字段：有则透传、无则不写（不制造 `undefined` 键，保持旧对象形态）。
+  const bytesBase64 = readString('bytesBase64');
+  if (bytesBase64 !== undefined) sanitized.bytesBase64 = bytesBase64;
+  const templateId = readString('templateId');
+  if (templateId !== undefined) sanitized.templateId = templateId;
+  const chunkCount = readNumber('chunkCount');
+  if (chunkCount !== undefined) sanitized.chunkCount = chunkCount;
+  const chunkSize = readNumber('chunkSize');
+  if (chunkSize !== undefined) sanitized.chunkSize = chunkSize;
+  const contentHash = readString('contentHash');
+  if (contentHash !== undefined) sanitized.contentHash = contentHash;
+
+  return sanitized;
 }
 
 /** 卡片槽位深合并（避免历史配置缺槽位导致渲染崩溃） */
@@ -157,6 +208,13 @@ export function assertCardViewConfig(raw: unknown): CardViewConfig {
     ? (detailSource.drawer as unknown as Partial<DrawerConfig>)
     : {};
 
+  // ⭐ 纯增（docx 模板导入）：透传导入来源与模板本体；缺省一律不写字段（= 按 'blocks' 处理）。
+  const docSource: DetailConfig['docSource'] =
+    detailSource && (detailSource.docSource === 'blocks' || detailSource.docSource === 'imported')
+      ? detailSource.docSource
+      : undefined;
+  const importedDocx = detailSource ? sanitizeImportedDocx(detailSource.importedDocx) : undefined;
+
   const detail: DetailConfig = detailSource
     ? {
         mode: 'document',
@@ -171,6 +229,9 @@ export function assertCardViewConfig(raw: unknown): CardViewConfig {
               blocks: Array.isArray(detailSource.doc.blocks) ? detailSource.doc.blocks : [],
             }
           : base.detail.doc,
+        // 仅在实际存在时写入：保持旧配置对象形态不变（纯增，不影响既有断言）。
+        ...(docSource !== undefined ? { docSource } : {}),
+        ...(importedDocx !== undefined ? { importedDocx } : {}),
       }
     : defaultDetailConfig();
 
@@ -193,5 +254,8 @@ export function assertCardViewConfig(raw: unknown): CardViewConfig {
     theme: themeSource ? { ...base.theme, ...themeSource } : base.theme,
     density: densitySource ? { ...defaultDensity(), ...densitySource } : base.density,
     highlightRules,
+    // §22：可选顶层字段，缺失/损坏一律净化为「不筛」；此处拿不到字段元数据，
+    // 故只做结构/算子/值校验，字段存在性由上层拿到字段列表后二次净化。
+    filter: sanitizeFilterConfig(raw.filter),
   };
 }

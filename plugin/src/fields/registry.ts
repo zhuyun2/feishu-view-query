@@ -79,8 +79,9 @@ function registerP1Renderers(): void {
   registerRenderer(FieldType.Lookup, LookupRenderer);
   registerRenderer(FieldType.Link, LookupRenderer);
   registerRenderer(FieldType.DuplexLink, LookupRenderer);
-  // AutoNumber 为数字语义，复用数字渲染器（千分位/tabular-nums）
-  registerRenderer(FieldType.AutoNumber, NumberRenderer);
+  // AutoNumber：SDK 值为字符串编号（IOpenAutoNumber = ISelfCalculationValue<string>），
+  // 文本语义渲染（保留前导零/字母前缀）；数值语义仅供筛选引擎比较（见 normalize.normalizeAutoNumber）
+  registerRenderer(FieldType.AutoNumber, TextRenderer);
 }
 registerP1Renderers();
 

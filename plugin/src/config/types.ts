@@ -2,6 +2,7 @@
  * 配置数据模型 v2 全量定义（设计文档 §4，逐字落地）。
  * 纯类型模块：不含运行时依赖，可被任意层引用。
  */
+import type { FilterConfig } from '@/filter/types';
 
 /** 当前配置结构版本。v1 → v2：新增 doc 分支（文档式详情）。只增不改。 */
 export const CURRENT_SCHEMA_VERSION = 2;
@@ -16,6 +17,14 @@ export interface CardViewConfig {
   theme: StyleTheme;
   density: DensityConfig;
   highlightRules: HighlightRule[];
+  /**
+   * ⭐ 字段筛选（§22，纯增）。
+   *
+   * 声明为**可选**：`schemaVersion` 保持 2 不升版（§22.2.3 裁定：升 v3 会让旧端
+   * `unsupportedNewer` 整体只读，代价远大于「旧端仅丢一个可选字段」）。
+   * 缺省（旧配置）语义 = **不筛**，由 `assertCardViewConfig()` 补 `defaultFilterConfig()`。
+   */
+  filter?: FilterConfig;
 }
 
 export interface ConfigEnvelope {
@@ -90,6 +99,39 @@ export interface NumberFormatOptions {
 
 /* ===================== 4.3 文档排版模型（新增） ===================== */
 
+/**
+ * 导入的 docx 模板（「docx 模板导入」存储层的持久化载体）。
+ *
+ * ⭐ **模板字节不再塞进主配置**（1MB 模板 → base64 约 1.37MB；若留在主配置里，任何一次
+ * 配置保存都要搬运这 1.4MB，任一次失败会连累用户本次全部编辑一起丢）。现在主配置只留
+ * **引用 + 完整性**（`templateId` / `chunkCount` / `chunkSize` / `contentHash`），
+ * 字节本体分块存进**专用 key** `cbv:tpl:{viewId}:{templateId}:{index}`（见 `doc/template/storage.ts`）。
+ *
+ * ⚠️ `bytesBase64` 保留为**遗留可选字段**：旧配置里只有它、没有分块引用 →
+ * 读取时仍按内联 base64 解码（保证老配置不失效）。新上传**不再写它**。
+ */
+export interface ImportedDocx {
+  /** 原始文件名（仅用于展示，不参与渲染） */
+  fileName: string;
+  /** 原始字节数（用于校验「是否被截断/篡改」+ 展示，非 base64 长度） */
+  sizeBytes: number;
+  /** 导入时间戳（ms） */
+  uploadedAt: number;
+  /**
+   * ⚠️ 遗留内联 base64（≈ 4/3 膨胀）。
+   * 旧配置可能只有该字段；**新上传不再写**（改存分块）。读取时若存在则优先按内联解码。
+   */
+  bytesBase64?: string;
+  /** 本次上传的标识（新上传生成新 id；分块 key 用它命名空间） */
+  templateId?: string;
+  /** 分块数量 */
+  chunkCount?: number;
+  /** 每块 base64 **字符数**（非字节数） */
+  chunkSize?: number;
+  /** 内容哈希（对原始字节计算；读回时校验完整性） */
+  contentHash?: string;
+}
+
 /** 详情区配置：D3 固定为文档式 */
 export interface DetailConfig {
   mode: 'document'; // 预留扩展位，当前恒为 document
@@ -99,6 +141,18 @@ export interface DetailConfig {
   drawer: DrawerConfig;
   /** 文档模板（P0-11 / P0-12） */
   doc: DocTemplate;
+  /**
+   * ⭐ 文档来源（「docx 模板导入」纯增字段，**不升 schemaVersion**）：
+   * - `'blocks'` = 用可视化编辑器排的区块模板（**默认**；字段缺省亦按此处理）；
+   * - `'imported'` = 导入的 docx 模板（此时看 {@link ImportedDocx}）。
+   *
+   * 为什么可选且不升版：升版会让旧版插件读到 `unsupportedNewer` 从而**整体只读**，
+   * 代价远大于「旧端仅丢两个可选字段」。旧配置缺省 → 按 `'blocks'` 处理即可
+   * （由 `doc/template/storage.resolveDocSource` 统一兜底）。
+   */
+  docSource?: 'blocks' | 'imported';
+  /** 导入的 docx 模板（仅在 `docSource === 'imported'` 时有意义） */
+  importedDocx?: ImportedDocx;
 }
 
 export interface DrawerConfig {
@@ -123,6 +177,13 @@ export interface PageSetup {
   orientation: 'portrait' | 'landscape';
   /** 页边距，单位 px（@96dpi 基准；UI 层以 mm 呈现） */
   margin: { top: number; right: number; bottom: number; left: number };
+  /**
+   * ⚠️ `header` / `footer` / `showPageNumber` / `pageNumberFormat` / `headerFooterScope`
+   * **有意保留，不是死代码**（2026-09-21 设计变更）：详情已改为「单张连续长页」，编辑器不再提供
+   * 页眉/页码/页脚编辑控件，详情也不再渲染它们；但**已保存的历史配置**里存在这些字段，
+   * 保留字段才能向后兼容（删除字段会让老配置的迁移 / 反序列化失败）。
+   * 编辑器仅**不再编辑 / 不再渲染**它们，`PageSetupPanel` 见注释。
+   */
   header?: HeaderFooterConfig;
   footer?: HeaderFooterConfig;
   showPageNumber: boolean;

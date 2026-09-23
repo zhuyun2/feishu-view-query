@@ -6,14 +6,14 @@
  * 超出部分按 `SlotConfig.maxItemsPerCard` 一起截断，并在末尾显示 `+n`。
  */
 import { memo } from 'react';
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 import type { CardLayoutConfig, StyleTheme } from '@/config/types';
 import type { FieldsById } from './slotContent';
 import { labelOf, placementHasContent, visiblePlacements } from './slotContent';
 import { FieldValue } from './FieldValue';
 
 export interface SlotAttributesProps {
-  record: IRecord;
+  record: SdkRecord;
   layout: CardLayoutConfig;
   fieldsById: FieldsById;
   theme: StyleTheme;

@@ -10,6 +10,7 @@
  */
 import { isBridgeAvailable, getBridgeStore, getAppId } from '@/sdk/base';
 import { logWarn } from '@/utils/log';
+import { setTemplateBridgeStore } from '@/doc/template/storage';
 import { BridgeConfigRepository } from './BridgeConfigRepository';
 import type { ConfigRepository } from './ConfigRepository';
 import { getDefaultStorage, LocalStorageConfigRepository } from './LocalStorageConfigRepository';
@@ -28,6 +29,11 @@ export interface RepositorySelection {
 export function selectConfigRepository(appId: string = getAppId()): RepositorySelection {
   const bridgeStore = getBridgeStore();
   const storage = getDefaultStorage();
+
+  // ⭐ 把同一个 bridge 存储实例注册给「导入 docx 模板」的分块存储层（专用 key `cbv:tpl:*`）。
+  //    这样模板块与配置共用同一介质，且 UI 组件无需 import SDK。无 bridge → 注册 null，
+  //    写入侧据此走「小模板内联降级 / 大模板显式报错」，绝不把大模板静默塞进主配置。
+  setTemplateBridgeStore(bridgeStore);
 
   if (bridgeStore) {
     // F2：即便首选 bridge，也准备 localStorage 作为运行期降级目标

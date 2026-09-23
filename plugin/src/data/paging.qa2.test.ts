@@ -10,7 +10,7 @@
  * 断言来源：`03 §13.1` 增量加载「剩余 < 1 屏触发；100ms 节流」；T10「增量加载触发正确」。
  */
 import { describe, expect, it } from 'vitest';
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 import { appendUniqueRecords, PagedRecordController, type PageLoader } from './recordPages';
 import { RecordCache } from './RecordCache';
 import { getRecordId, type PageResult } from './RecordDataSource';
@@ -21,15 +21,15 @@ import {
   visibleCardRange,
 } from '@/components/grid/gridMath';
 
-function rec(id: string): IRecord {
-  return { recordId: id } as unknown as IRecord;
+function rec(id: string): SdkRecord {
+  return { recordId: id } as unknown as SdkRecord;
 }
 
-function page(records: IRecord[], pageToken: string | null, hasMore: boolean): PageResult {
+function page(records: SdkRecord[], pageToken: string | null, hasMore: boolean): PageResult {
   return { records, pageToken, hasMore };
 }
 
-const ids = (list: readonly IRecord[]): string[] => list.map((r) => getRecordId(r));
+const ids = (list: readonly SdkRecord[]): string[] => list.map((r) => getRecordId(r));
 
 /* ============================ 去重追加 ============================ */
 
@@ -43,7 +43,7 @@ describe('T10 · 分页去重追加（appendUniqueRecords）', () => {
   });
 
   it('缺 recordId 的记录不参与去重（原样保留）', () => {
-    const noId = { fields: {} } as unknown as IRecord;
+    const noId = { fields: {} } as unknown as SdkRecord;
     expect(appendUniqueRecords([noId], [noId]).length).toBe(2);
   });
 });

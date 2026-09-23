@@ -73,6 +73,7 @@ export function BannerStack({ onReconfigureFromTemplate, onOpenEditor, onRetryRe
   const unsupportedNewer = useViewStore((state) => state.unsupportedNewer);
   const degraded = useViewStore((state) => state.degraded);
   const degradedReason = useViewStore((state) => state.degradedReason);
+  const corrupted = useViewStore((state) => state.corrupted);
   const configCorrupted = useViewStore((state) => state.configCorrupted);
   const provisionedFromTemplate = useViewStore((state) => state.provisionedFromTemplate);
   const copyScenario = useViewStore((state) => state.copyScenario);
@@ -89,8 +90,11 @@ export function BannerStack({ onReconfigureFromTemplate, onOpenEditor, onRetryRe
     );
   }
 
-  // R8：介质降级提示条**常驻不可关闭**
-  if (degraded && !configCorrupted) {
+  // R8：介质降级提示条**常驻不可关闭**。
+  // 必须用 `corrupted` 而非 `configCorrupted` 排除：后者多带了 `load.config === null` 条件，
+  // 会出现「数据损坏过但 config 非 null」时 R8 又冒出来陈述存储位置的错误。
+  // 两条天然互斥：corrupted → 数据损坏条；degraded && !corrupted → 介质降级条。
+  if (degraded && corrupted !== true) {
     items.push(
       <Banner key="degraded" kind="warning" testId="banner-degraded">
         {degradedReason && degradedReason.trim() !== ''

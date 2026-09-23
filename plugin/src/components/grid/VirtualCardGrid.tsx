@@ -13,6 +13,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { CardLayoutConfig, DensityConfig, HighlightRule, StyleTheme } from '@/config/types';
 import type { FieldMetaLite } from '@/fields/fieldTypes';
+import type { SdkRecord } from '@/sdk/port';
 import { useViewStore } from '@/state/ViewStore';
 import { selectGridMetrics, selectRowCount } from '@/state/selectors';
 import type { HoverAnchor } from '@/state/UiStore';
@@ -29,6 +30,14 @@ export interface VirtualCardGridProps {
   locale: string;
   attributesMaxRows: number;
   highlightRules: HighlightRule[];
+  /**
+   * 要渲染的记录序列（§22 F3 数据流终点）。
+   *
+   * **不传**时回落到 `ViewStore.records`（既有行为不变，例如编辑态预览）。
+   * `ViewShell` 传入的是 `selectVisibleRecords` 的输出
+   * （原生筛选 ∩ 插件筛选 ∩ 搜索），保证「屏幕上看到的」与「状态行声称的」是同一个集合。
+   */
+  records?: readonly SdkRecord[];
   /** 编辑态预览时传 false（不参与交互） */
   interactive?: boolean;
   onOpenRecord: (recordId: string) => void;
@@ -58,16 +67,20 @@ function VirtualCardGridInner(props: VirtualCardGridProps): JSX.Element {
     locale,
     attributesMaxRows,
     highlightRules,
+    records: recordsProp,
     interactive = true,
     onOpenRecord,
     onHoverRecord,
     onHoverEnd,
   } = props;
 
-  const records = useViewStore((state) => state.records);
+  const storeRecords = useViewStore((state) => state.records);
   const hasMore = useViewStore((state) => state.hasMore);
   const loadingMore = useViewStore((state) => state.loadingMore);
   const loadMore = useViewStore((state) => state.loadMore);
+
+  // 未提供 records 时延用库内的已加载记录（保持既有调用点行为零变更）
+  const records: readonly SdkRecord[] = recordsProp ?? storeRecords;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [containerWidth, setContainerWidth] = useState(0);

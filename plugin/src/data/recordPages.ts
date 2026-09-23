@@ -9,7 +9,7 @@
  *  - 记录去重（`appendUniqueRecords` 按 recordId 去重 → 不重复请求也绝不重复渲染）；
  *  - 缓存命中（复用 `RecordCache`）。
  */
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 import type { RecordCache } from './RecordCache';
 import { getRecordId, type PageResult } from './RecordDataSource';
 
@@ -17,9 +17,9 @@ import { getRecordId, type PageResult } from './RecordDataSource';
  * 合并两批记录并按 `recordId` 去重（保持既有顺序在前）。
  * 去重可防止「重叠分页 / 缓存回填 / 拖动刷新」导致的重复卡片。
  */
-export function appendUniqueRecords(existing: readonly IRecord[], incoming: readonly IRecord[]): IRecord[] {
+export function appendUniqueRecords(existing: readonly SdkRecord[], incoming: readonly SdkRecord[]): SdkRecord[] {
   const seen = new Set<string>();
-  const out: IRecord[] = [];
+  const out: SdkRecord[] = [];
   for (const record of existing) {
     const id = getRecordId(record);
     if (id !== '' && seen.has(id)) continue;
@@ -58,7 +58,7 @@ export interface PagedRecordControllerOptions {
  * - `requestCount` 统计**真实**发起的取数次数，供测试断言「分页触发次数 / 不重复请求」。
  */
 export class PagedRecordController {
-  private records: IRecord[];
+  private records: SdkRecord[];
   private pageToken: string | null;
   private hasMore: boolean;
   private pending = false;
@@ -76,7 +76,7 @@ export class PagedRecordController {
     this.cacheKeyPrefix = options.cacheKeyPrefix ?? 'page';
   }
 
-  get list(): readonly IRecord[] {
+  get list(): readonly SdkRecord[] {
     return this.records;
   }
 

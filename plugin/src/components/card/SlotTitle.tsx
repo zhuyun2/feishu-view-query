@@ -3,14 +3,14 @@
  * 空槽位按 `collapsibleWhenEmpty` 收合（不占位）。
  */
 import { memo } from 'react';
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 import type { CardLayoutConfig, StyleTheme } from '@/config/types';
 import type { FieldsById } from './slotContent';
 import { slotHasContent, visiblePlacements } from './slotContent';
 import { FieldValue } from './FieldValue';
 
 export interface SlotTitleProps {
-  record: IRecord;
+  record: SdkRecord;
   layout: CardLayoutConfig;
   fieldsById: FieldsById;
   theme: StyleTheme;

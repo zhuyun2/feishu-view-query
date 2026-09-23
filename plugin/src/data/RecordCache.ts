@@ -2,7 +2,7 @@
  * 页级 + 记录级 LRU 缓存（设计文档 §6.4 / §13.1）。
  * 仅存内存，不落地数据副本（PRD 安全边界）。
  */
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 import type { PageResult } from './RecordDataSource';
 
 /** 页缓存条目（含游标信息，避免命中缓存后无法续页） */
@@ -60,11 +60,11 @@ export interface RecordCacheStats {
 
 export class RecordCache {
   private readonly pageCache: LruCache<string, CachedPage>;
-  private readonly recordCache: LruCache<string, IRecord>;
+  private readonly recordCache: LruCache<string, SdkRecord>;
 
   constructor(pageCapacity = 32, recordCapacity = 2000) {
     this.pageCache = new LruCache<string, CachedPage>(pageCapacity);
-    this.recordCache = new LruCache<string, IRecord>(recordCapacity);
+    this.recordCache = new LruCache<string, SdkRecord>(recordCapacity);
   }
 
   /** 页 key = `${viewId}|${pageToken ?? 'first'}` */
@@ -85,11 +85,11 @@ export class RecordCache {
     }
   }
 
-  getRecord(recordId: string): IRecord | undefined {
+  getRecord(recordId: string): SdkRecord | undefined {
     return this.recordCache.get(recordId);
   }
 
-  putRecord(recordId: string, record: IRecord): void {
+  putRecord(recordId: string, record: SdkRecord): void {
     this.recordCache.set(recordId, record);
   }
 

@@ -7,6 +7,38 @@
     <title>卡片视图</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <pre id="cbv-inline-probe" style="white-space: pre-wrap; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; padding: 12px">环境诊断加载中…</pre>
+    </div>
+    <script>
+      /* 内联探针（§0.3.5 方案 B / team-lead 裁定 4）：**零依赖** —— 不用 SDK、不用 React、
+         不引任何外部 chunk。覆盖 `main.tsx` 覆盖不到的情形：bundle 本身没跑起来
+         （网络失败 / CSP / chunk 404）。成功挂载时由 `main.tsx` 清除其占位文本。 */
+      (function () {
+        try {
+          var p = {
+            inlineProbeExecuted: true,
+            windowName: window.name || '',
+            inIframe: window.parent !== window,
+            isTop: window.top === window,
+            href: location.href,
+            origin: location.origin,
+            readyState: document.readyState,
+            ua: navigator.userAgent,
+          };
+          window.__cbvProbe__ = p;
+          var el = document.getElementById('cbv-inline-probe');
+          if (el) {
+            el.textContent =
+              '内联探针已执行 —— 若画面长时间停留在此，说明 JS bundle 未能加载。\n\n' +
+              Object.keys(p)
+                .map(function (k) { return k + ' = ' + p[k]; })
+                .join('\n');
+          }
+        } catch (e) {
+          /* 探针自身绝不允许影响页面 */
+        }
+      })();
+    </script>
   </body>
 </html>

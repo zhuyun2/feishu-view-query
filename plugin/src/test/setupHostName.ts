@@ -1,0 +1,22 @@
+/**
+ * vitest 全局 setup：伪造 `window.name`（§0.3.4 方案 ③ / team-lead 裁定 3）。
+ *
+ * 为什么要写这一行：
+ *  `@lark-opdev/block-bitable-api` 在 **import 期**就读 `window.name`，期望宿主写入
+ *  `{ blockTypeId, channel }`；读不到就抛 `Block client only running in Block host`。
+ *  jsdom 默认给的是空串，因此**任何**一个测试只要真的 import 了 SDK，就会炸。
+ *
+ * 为什么是「无条件加固」而不是等出事再加：
+ *  当前 422 个用例**零运行时加载 SDK**（哨兵实验实证），现在是安全的；但只要将来有人
+ *  写了值导入的测试、或某条 import 链被改成静态求值，整个套件会瞬间崩溃。
+ *  这一行是廉价的保险，对现有用例零影响（实测 30 files / 422 passed / EXIT=0）。
+ *
+ * ⚠️ 这里的值是**测试契约用的假值**，与真机 `blockTypeId` 无关，绝不可用作业务判据。
+ *
+ * ⚠️ 另：这一行**挡不住** SDK import 期向宿主发消息产生的未处理 rejection
+ *  （`Cannot found handler of bitable.*`）。那一类由 `vitest.sdk.config.ts` 在
+ *  **隔离环境**里单独处理，主配置不得放宽 —— 见 `src/sdk/sdkPackage.smoke.test.ts` 的说明。
+ */
+window.name = JSON.stringify({ blockTypeId: 'blk_test_only', channel: 'ch_test_only' });
+
+export {};

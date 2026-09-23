@@ -5,6 +5,7 @@
  * 切换仅发生在 `factory.ts` 一处。
  */
 import { CONFIG_SIZE_LIMIT_BYTES, CONFIG_SIZE_WARN_BYTES } from '@/constants';
+import { formatError } from '@/utils/errorText';
 import { checksumOf, stableStringify, utf8ByteLength } from '@/utils/hash';
 import { CONFIG_PLUGIN_VERSION } from './defaults';
 import { migrate } from './migrations';
@@ -17,11 +18,30 @@ export interface LoadResult {
   config: CardViewConfig | null;
   /** 走了降级：损坏回退 / 介质降级 */
   degraded: boolean;
+  /**
+   * 是否为**数据损坏**（非法 JSON / 结构缺失 / checksum 不匹配 / 迁移失败）。
+   *
+   * `degraded` 混装了两种语义，无法据此区分：
+   *  - `corrupted: true` —— 介质读到了数据，但**内容不可信**（真实损坏）；
+   *  - `corrupted: false` —— 介质故障降级 / 空值，**数据本身没问题**。
+   *
+   * 上层（UI 告警）必须以此字段判定「配置损坏」，不能只用 `degraded`，
+   * 否则一次 bridge 网络抖动就会把「读不到」误报成「数据损坏」。
+   */
+  corrupted?: boolean;
   /** 读到更高版本 → 只读模式（禁止保存） */
   unsupportedNewer: boolean;
   source: ConfigSource;
   /** D4 首开提示 */
   provisionedFromTemplate?: boolean;
+  /**
+   * **可展示给用户的降级说明**（仅「介质降级」分支填写）。
+   *
+   * 与 `error` 不同：`error` 是诊断串（含错误码、原始异常），不面向用户。
+   * 介质降级时 UI 会陈述存储位置（"仅本地保存"），故必须给出**准确**的原因，
+   * 不能让 UI 落到与事实不符的兜底文案上。
+   */
+  reason?: string;
   /** 失败原因（诊断用，不直接展示给用户） */
   error?: string;
 }
@@ -188,6 +208,7 @@ export function resolveLoadedConfig(raw: unknown, options: LoadOptions): LoadRes
   const empty: LoadResult = {
     config: null,
     degraded: false,
+    corrupted: false,
     unsupportedNewer: false,
     source: options.source,
   };
@@ -202,6 +223,8 @@ export function resolveLoadedConfig(raw: unknown, options: LoadOptions): LoadRes
     return {
       config: null,
       degraded: true,
+      // 介质读到了数据但内容不可信 → 真实损坏（区别于「读不到」的介质降级）
+      corrupted: true,
       unsupportedNewer: false,
       source: options.source,
       error: reason ?? 'unknown',
@@ -214,6 +237,7 @@ export function resolveLoadedConfig(raw: unknown, options: LoadOptions): LoadRes
     return {
       config,
       degraded: false,
+      corrupted: false,
       unsupportedNewer,
       source: options.source,
       provisionedFromTemplate: config.meta.provisionedFromTemplate,
@@ -223,9 +247,12 @@ export function resolveLoadedConfig(raw: unknown, options: LoadOptions): LoadRes
     return {
       config: null,
       degraded: true,
+      // 信封可解析但迁移失败 → 真实损坏（区别于「读不到」的介质降级）
+      corrupted: true,
       unsupportedNewer,
       source: options.source,
-      error: err instanceof Error ? err.message : 'migration-failed',
+      // 迁移抛错可能是 SDK 的普通对象（{ code, msg }），必须经 formatError 保留错误码
+      error: `migration-failed: ${formatError(err)}`,
     };
   }
 }

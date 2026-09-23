@@ -3,6 +3,7 @@
  * 全项目唯一允许使用 console 的地方（eslint 已放开）。
  */
 /* eslint-disable no-console */
+import { formatError } from './errorText';
 
 export interface LogContext {
   viewId?: string;
@@ -20,7 +21,9 @@ function prefix(scope: string, ctx?: LogContext): string {
 
 /** 记录错误（不抛出，保证单点失败不扩散） */
 export function logError(scope: string, err: unknown, ctx?: LogContext): void {
-  const message = err instanceof Error ? err.message : String(err);
+  // 非 Error 对象（飞书 SDK 形如 { code, msg }）必须保留错误码与原因，
+  // 否则 String(err) 只会得到 "[object Object]"，生产环境无法诊断。
+  const message = formatError(err);
   console.error(prefix(scope, ctx), message, { error: err, ...ctx });
 }
 

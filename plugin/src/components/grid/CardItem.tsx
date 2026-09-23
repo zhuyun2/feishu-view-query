@@ -5,14 +5,14 @@
  * （命中「render 内禁止新建对象」的红线优化）。
  */
 import { memo, useMemo } from 'react';
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 import type { CardLayoutConfig, HighlightRule, StyleTheme } from '@/config/types';
 import type { FieldMetaLite } from '@/fields/fieldTypes';
 import { matchRules, resolveCardStyle } from '@/highlight/ruleEngine';
 import { Card } from '@/components/card/Card';
 
 export interface CardItemProps {
-  record: IRecord;
+  record: SdkRecord;
   layout: CardLayoutConfig;
   fieldsById: Record<string, FieldMetaLite>;
   theme: StyleTheme;

@@ -9,7 +9,7 @@ import type { ReactElement } from 'react';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 import {
   EMPTY_STATE_KINDS,
   EMPTY_STATE_SPECS,
@@ -174,9 +174,9 @@ describe('T09 · 选择器：搜索过滤 / 已用字段 / 计数文案', () => 
   ];
   const fieldsById: Record<string, FieldMetaLite> = { f_title: metas[0], f_amount: metas[1] };
   const layout = defaultCardLayout(metas);
-  const records: IRecord[] = [
-    { recordId: 'a', fields: { f_title: '苹果', f_amount: 1 } } as unknown as IRecord,
-    { recordId: 'b', fields: { f_title: '香蕉', f_amount: 2 } } as unknown as IRecord,
+  const records: SdkRecord[] = [
+    { recordId: 'a', fields: { f_title: '苹果', f_amount: 1 } } as unknown as SdkRecord,
+    { recordId: 'b', fields: { f_title: '香蕉', f_amount: 2 } } as unknown as SdkRecord,
   ];
 
   it('selectPlacedFieldIds：按槽位顺序去重', () => {

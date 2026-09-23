@@ -54,6 +54,8 @@ export interface ResolvedConfig {
   copyScenario: boolean;
   /** 加载态是否降级（透传，供 Banner） */
   degraded: boolean;
+  /** 是否为**数据损坏**（透传，供 Banner 区分「损坏」与「介质降级」） */
+  corrupted: boolean;
   /** 是否只读（更高版本配置） */
   unsupportedNewer: boolean;
 }
@@ -70,6 +72,7 @@ export function resolveConfigOnLoad(load: LoadResult, ctx: ProvisionContext): Re
       provisioned: false,
       copyScenario: false,
       degraded: load.degraded,
+      corrupted: load.corrupted === true,
       unsupportedNewer: load.unsupportedNewer,
     };
   }
@@ -79,6 +82,7 @@ export function resolveConfigOnLoad(load: LoadResult, ctx: ProvisionContext): Re
     provisioned: true,
     copyScenario: looksLikeCopyView(ctx.viewName),
     degraded: load.degraded,
+    corrupted: load.corrupted === true,
     unsupportedNewer: load.unsupportedNewer,
   };
 }

@@ -27,6 +27,28 @@ export function formatDate(timestamp: number, pattern = 'YYYY-MM-DD'): string {
   return pattern.replace(/YYYY|MM|DD|HH|mm|ss/g, (token) => map[token] ?? token);
 }
 
+/**
+ * SDK `DateFormatter` 方言 → 本模块 [`formatDate`] 方言的 token 映射。
+ *
+ * 背景：飞书 SDK 的 `DateFormatter` 枚举使用**小写 `yyyy`**（`@lark-opdev/block-bitable-api`
+ * 的 `DateFormatter.DATE_YMD_WITH_SLASH = "yyyy/MM/dd"`），而本模块的 `formatDate`
+ * **只认大写 `YYYY`**。若不映射就直接把字段自带的 `dateFormat` 透传给 `formatDate`，
+ * 结果会原样输出字面量 `yyyy/07/31`——**看起来"修复没生效"，实则是 token 大小写不匹配**。
+ *
+ * 映射规则（仅处理二者不一致的 token，其余 `MM` / `dd`→`DD` / `HH` / `mm` / `ss` 对齐）：
+ *   - `yyyy` → `YYYY`（年）
+ *   - `dd`   → `DD`（日）
+ * 幂等：已是 `YYYY` / `DD` 的输入不会被再次替换。
+ * 非字符串 / 空串原样返回。
+ *
+ * @param pattern SDK `DateFormatter`（或任意 pattern 字符串）
+ * @returns 可安全传入 `formatDate` 的 pattern
+ */
+export function mapDateFormatterPattern(pattern: string): string {
+  if (typeof pattern !== 'string' || pattern === '') return pattern;
+  return pattern.replace(/yyyy/g, 'YYYY').replace(/dd/g, 'DD');
+}
+
 /** 千分位 + 可选小数位 */
 export function formatNumber(value: number, options?: NumberFormatOptions): string {
   if (!Number.isFinite(value)) return '';

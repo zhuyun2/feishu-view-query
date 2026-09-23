@@ -12,6 +12,8 @@ import { useCardViewInit } from '@/hooks/useCardViewInit';
 import { usePermission } from '@/hooks/usePermission';
 import { useThemeTokens } from '@/hooks/useThemeTokens';
 import { useViewStore } from '@/state/ViewStore';
+import type { ErrorShape, HostProbeResult } from '@/utils/hostProbe';
+import { formatErrorShape, formatHostProbe } from '@/utils/hostProbe';
 
 function LoadingState({ label }: { label: string }): JSX.Element {
   return (
@@ -24,12 +26,38 @@ function LoadingState({ label }: { label: string }): JSX.Element {
   );
 }
 
-function ErrorState({ message, onRetry }: { message: string | null; onRetry: () => void }): JSX.Element {
+/**
+ * 错误态。
+ *
+ * 除标题 / 副标题 / 重试按钮外，附一段**只读诊断文本**（等宽 `<pre>`，可整段选中复制）：
+ * 真机 E2E 里"所有 SDK 调用统一 timeout"，需要靠它判定宿主实现的是哪套通信协议。
+ * 仅在 `probe` / `shape` 存在时渲染 —— 成功路径绝不会出现。
+ */
+function ErrorState({
+  message,
+  probe,
+  shape,
+  onRetry,
+}: {
+  message: string | null;
+  probe: HostProbeResult | null;
+  shape: ErrorShape | null;
+  onRetry: () => void;
+}): JSX.Element {
+  const sections: string[] = [];
+  if (shape) sections.push(formatErrorShape(shape));
+  if (probe) sections.push(formatHostProbe(probe));
+
   return (
     <div className="cbv-app">
       <div className="cbv-state" role="alert">
         <div className="cbv-state__title">加载失败</div>
         <div className="cbv-state__desc">{message ?? '未知错误'}</div>
+        {sections.length > 0 ? (
+          <pre className="cbv-state__diag" data-testid="host-probe">
+            {sections.join('\n\n')}
+          </pre>
+        ) : null}
         <button type="button" className="cbv-btn cbv-btn--primary" onClick={onRetry}>
           重试
         </button>
@@ -56,10 +84,19 @@ function BrowseView(): JSX.Element {
 export default function App(): JSX.Element {
   const status = useViewStore((state) => state.status);
   const errorMessage = useViewStore((state) => state.errorMessage);
+  const errorProbe = useViewStore((state) => state.errorProbe);
+  const errorShape = useViewStore((state) => state.errorShape);
   const { reload } = useCardViewInit();
 
   if (status === 'error') {
-    return <ErrorState message={errorMessage} onRetry={() => void reload()} />;
+    return (
+      <ErrorState
+        message={errorMessage}
+        probe={errorProbe}
+        shape={errorShape}
+        onRetry={() => void reload()}
+      />
+    );
   }
   if (status === 'browse') {
     return (

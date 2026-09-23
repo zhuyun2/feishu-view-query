@@ -7,14 +7,14 @@
  */
 import { memo, useMemo } from 'react';
 import type { CSSProperties } from 'react';
-import type { IRecord } from '@lark-base-open/js-sdk';
+import type { SdkRecord } from '@/sdk/port';
 import type { CardLayoutConfig, HighlightStyle, StyleTheme } from '@/config/types';
 import type { FieldMetaLite } from '@/fields/fieldTypes';
 import { CardBody } from './CardBody';
 import { recordTitleText } from './slotContent';
 
 export interface CardProps {
-  record: IRecord;
+  record: SdkRecord;
   layout: CardLayoutConfig;
   fieldsById: Record<string, FieldMetaLite>;
   theme: StyleTheme;
