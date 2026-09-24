@@ -9,6 +9,7 @@ import { FIRST_BATCH_PAGE_SIZE } from '@/constants';
 import { selectConfigRepository } from '@/config/factory';
 import { resolveConfigOnLoad } from '@/config/provision';
 import { SdkRecordDataSource } from '@/data/SdkRecordDataSource';
+import { resolveTotalInfo } from '@/data/RecordDataSource';
 import { sanitizeFilterConfig } from '@/filter/sanitize';
 import { toFieldMetaLite } from '@/fields/fieldTypes';
 import { canEditTable, getFieldMetaList, getTable, getViewMetaList } from '@/sdk/base';
@@ -82,7 +83,9 @@ export function useCardViewInit(): CardViewInitResult {
       });
 
       step = 'count';
-      const total = await dataSource.count();
+      // ⭐ 总数优先取自首页响应的 total（零额外请求、天然尊重视图可见范围）；
+      //    取不到时 totalKnown=false，让文案层退化为「已加载 L 条」而非谎报「共 0 条」。
+      const { total, totalKnown } = await resolveTotalInfo(dataSource, firstPage);
 
       useViewStore.getState().applyInit({
         env,
@@ -111,6 +114,7 @@ export function useCardViewInit(): CardViewInitResult {
         repository: selection.repository,
         firstPage,
         total,
+        totalKnown,
         // ⭐ 数据损坏（有 error 且无可用配置）与「介质降级」分开：前者不切介质，仅回退默认模板 + 备份。
         // 判定必须用 `corrupted` 而非 `degraded`：`degraded` 也涵盖 bridge 读取失败（网络/权限/超时），
         // 那属于「读不到」而非「数据坏了」，用它会把一次网络抖动误报成配置损坏。

@@ -16,6 +16,14 @@ export const DEFAULT_PAGE_SIZE = 200;
 /** 分页页大小硬上限（官方限制） */
 export const MAX_PAGE_SIZE = 200;
 
+/**
+ * 「筛选/搜索生效后自动全量加载」的静默阈值。
+ *
+ * `totalKnown && total <= 该阈值` → 静默全量（不显示进度与取消按钮，因为量小、耗时可忽略）；
+ * 超过阈值 → 显示进度并提供「取消加载」（万行表全量约 50~60 批、10~30s，必须有可感知反馈）。
+ */
+export const AUTO_LOAD_ALL_SILENT_THRESHOLD = 2000;
+
 /** 卡片网格首批渲染条数（M1 只取首批 1 页，M2 由虚拟滚动增量加载接管） */
 export const FIRST_BATCH_PAGE_SIZE = 200;
 

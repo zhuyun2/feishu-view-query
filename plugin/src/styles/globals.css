@@ -2013,3 +2013,190 @@
     color: var(--color-text-2);
   }
 }
+
+/* ============ req1：筛选值下拉可搜 + 多选（SearchableMultiSelect / FieldSelect 可搜提示） ============
+ * ⭐ 新增类前缀一律 `cbv-`。本块**只新增**，不改动既有 `.cbv-fieldselect*` 核心度量
+ *   （触发体宽度仍由 `.cbv-filter-row` 的 flex 决定；「浮层最小宽度」改由 JS `usePopupPosition` 计算，
+ *    避免 CSS `min-width` 与内联 `width` 互相打架）。
+ */
+@layer components {
+  /* 触发体右侧 🔍（可搜提示；纯装饰，pointer-events:none 不吃点击） */
+  .cbv-fieldselect__search-icon,
+  .cbv-multiselect__search-icon {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 11px;
+    line-height: 1;
+    pointer-events: none;
+    opacity: 0.75;
+  }
+
+  /* 有 🔍 时给触发体留出右侧空间，避免文字被图标压住 */
+  .cbv-fieldselect__input--hint,
+  .cbv-multiselect__input--hint {
+    padding-right: 22px;
+  }
+
+  /* 浮层顶部「输入关键字筛选」提示行 */
+  .cbv-fieldselect__search-hint,
+  .cbv-multiselect__search-hint {
+    padding: 2px var(--space-2) 4px;
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+    border-bottom: 1px solid var(--color-divider);
+    margin-bottom: var(--space-1);
+  }
+
+  /* ============ 多选下拉（SearchableMultiSelect）：chips + 搜索输入 + 清空 ============ */
+  .cbv-multiselect {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1);
+    min-height: 28px;
+    min-width: 0;
+    padding: 2px var(--space-1) 2px var(--space-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-bg-panel);
+  }
+
+  .cbv-multiselect--open {
+    border-color: var(--color-primary);
+  }
+
+  .cbv-multiselect--disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  /* 搜索输入框：占据 chips 之后的剩余空间，最小宽度保证可点 / 可输入 */
+  .cbv-multiselect__input {
+    flex: 1 1 60px;
+    min-width: 60px;
+    height: 22px;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: var(--font-size-12);
+    color: var(--color-text-1);
+    padding: 0;
+  }
+
+  .cbv-multiselect__input::placeholder {
+    color: var(--color-text-3);
+  }
+
+  /* 已选 chip（可单个移除） */
+  .cbv-multiselect__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    max-width: 100%;
+    padding: 0 2px 0 var(--space-2);
+    height: 20px;
+    border-radius: var(--radius-pill);
+    background: var(--color-bg-app);
+    font-size: var(--font-size-11);
+    color: var(--color-text-1);
+  }
+
+  .cbv-multiselect__chip-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cbv-multiselect__chip-remove,
+  .cbv-multiselect__clear {
+    border: none;
+    background: transparent;
+    color: var(--color-text-3);
+    cursor: pointer;
+    font-size: var(--font-size-11);
+    line-height: 1;
+    padding: 0 2px;
+  }
+
+  .cbv-multiselect__chip-remove:hover,
+  .cbv-multiselect__clear:hover {
+    color: var(--color-error);
+  }
+
+  /* 浮层（与 .cbv-fieldselect__popup 同观感；宽度由 JS 定位计算，此处只管视觉 / 滚动） */
+  .cbv-multiselect__popup {
+    position: fixed;
+    z-index: 60;
+    max-height: 240px;
+    overflow-y: auto;
+    padding: var(--space-1);
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    box-shadow: var(--shadow-popover);
+  }
+
+  .cbv-multiselect__list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .cbv-multiselect__option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 3px var(--space-2);
+    border-radius: var(--radius-control);
+    font-size: var(--font-size-12);
+    color: var(--color-text-1);
+    cursor: pointer;
+  }
+
+  .cbv-multiselect__option--active {
+    background: var(--color-bg-app);
+  }
+
+  .cbv-multiselect__option--selected {
+    font-weight: 500;
+  }
+
+  .cbv-multiselect__checkbox {
+    flex: 0 0 auto;
+    margin: 0;
+    pointer-events: none;
+  }
+
+  .cbv-multiselect__option-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cbv-multiselect__option-hint {
+    flex: 0 1 auto;
+    max-width: 50%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+  }
+
+  .cbv-multiselect__empty {
+    padding: var(--space-2);
+    text-align: center;
+    font-size: var(--font-size-12);
+    color: var(--color-text-3);
+  }
+
+  /* 筛选行：与字段下拉 / 算子下拉并排时的度量（略宽，容得下 chips） */
+  .cbv-filter-row .cbv-multiselect {
+    flex: 1 1 160px;
+    min-width: 140px;
+  }
+}

@@ -10,6 +10,12 @@
  *    ⚠️ 这两类若误输出单元索引，装箱会按单元把它们拆到两页，与「整块换页」的裁定冲突。
  *  - 三者都**不**输出 `data-repeat-header`（表格续页表头专用，属 T05）。
  *
+ * ⭐ 需求 2（关联字段只读表格化）：`fieldList` / `keyValueGrid` 里若某字段是关联字段
+ *   （`Link` / `DuplexLink`）且**已预取到**只读表格数据（`linkTables[fieldId]`），
+ *   值位改由 {@link LinkTableView} 呈现（只读表格）；**无数据则完全维持原有文本呈现**
+ *   （优雅降级：编辑器无 SDK / 预取失败 / 字段为空）。字段格式化仍**只**走
+ *   `<DocFieldValue/>`（表格单元格内部亦复用它），本文件不新增任何字段格式化实现。
+ *
  * 跨页片段：`fragmentIndex` / `fragmentsTotal` 透传给 `DocFieldValue` →
  * 渲染器在非首片省略「字段名：」前缀（`fieldTypes.docLabelPrefix`），防止续页重复标签。
  */
@@ -23,6 +29,7 @@ import type {
 import type { NormalizedItem, NormalizedValue } from '@/fields/fieldTypes';
 import type { DocBlockRenderProps } from './BlockRenderer';
 import { DocFieldValue } from '../DocFieldValue';
+import { LinkTableView } from './MediaBlocks';
 
 /** 网格列间距 / 行间距 px（集中定义，避免散落 magic number，§21.9） */
 const GRID_COLUMN_GAP = 12;
@@ -77,7 +84,7 @@ export function clampLabelWidth(labelWidthPx: number, columns: number, contentWi
  * 标签由本组件画（有独立列宽与 `showColon`），值走 `DocFieldValue`（`showLabel=false`）。
  */
 export function KeyValueGridView(props: KeyValueGridViewProps): ReactElement {
-  const { payload, innerStyle, theme, styleTheme, record, fieldsById, locale, fragmentIndex, fragmentsTotal, contentWidth } =
+  const { payload, innerStyle, theme, styleTheme, record, fieldsById, locale, fragmentIndex, fragmentsTotal, contentWidth, linkTables } =
     props;
   const { columns, rows, showColon, zebra } = payload;
   const labelWidth = clampLabelWidth(payload.labelWidthPx, columns, contentWidth);
@@ -120,17 +127,31 @@ export function KeyValueGridView(props: KeyValueGridViewProps): ReactElement {
                 {showColon ? `${row.label}：` : row.label}
               </span>
               <span className="cbv-doc-kv-value" style={{ flex: '1 1 auto', minWidth: 0 }}>
-                <DocFieldValue
-                  fieldId={row.fieldId}
-                  value={row.value}
-                  record={record}
-                  fieldsById={fieldsById}
-                  theme={styleTheme}
-                  locale={locale}
-                  showLabel={false}
-                  fragmentIndex={fragmentIndex}
-                  fragmentsTotal={fragmentsTotal}
-                />
+                {linkTables[row.fieldId] ? (
+                  // ⭐ 需求 2：关联字段（Link/DuplexLink）有预取数据 → 只读表格（与多维表格详情一致，但不可编辑）
+                  <LinkTableView
+                    table={linkTables[row.fieldId]}
+                    theme={theme}
+                    styleTheme={styleTheme}
+                    locale={locale}
+                    record={record}
+                    contentWidth={contentWidth}
+                    fragmentIndex={fragmentIndex}
+                    fragmentsTotal={fragmentsTotal}
+                  />
+                ) : (
+                  <DocFieldValue
+                    fieldId={row.fieldId}
+                    value={row.value}
+                    record={record}
+                    fieldsById={fieldsById}
+                    theme={styleTheme}
+                    locale={locale}
+                    showLabel={false}
+                    fragmentIndex={fragmentIndex}
+                    fragmentsTotal={fragmentsTotal}
+                  />
+                )}
               </span>
             </div>
           );
@@ -146,7 +167,8 @@ export function KeyValueGridView(props: KeyValueGridViewProps): ReactElement {
  * 由 `docLabelPrefix()` 统一决定「是否画标签」（含续页抑制），避免两套标签逻辑。
  */
 export function FieldListView(props: FieldListViewProps): ReactElement {
-  const { payload, innerStyle, slice, styleTheme, record, fieldsById, locale, fragmentIndex, fragmentsTotal } = props;
+  const { payload, innerStyle, slice, theme, styleTheme, record, fieldsById, locale, fragmentIndex, fragmentsTotal, contentWidth, linkTables } =
+    props;
   const { from, to } = sliceRange(slice, payload.items.length);
   const visible = payload.items.slice(from, to);
 
@@ -157,18 +179,35 @@ export function FieldListView(props: FieldListViewProps): ReactElement {
           const index = from + offset;
           return (
             <div className="cbv-doc-field-list__item" key={`${item.fieldId}-${index}`} data-unit-index={index}>
-              <DocFieldValue
-                fieldId={item.fieldId}
-                value={item.value}
-                record={record}
-                fieldsById={fieldsById}
-                theme={styleTheme}
-                locale={locale}
-                showLabel={payload.showLabels}
-                labelText={item.label}
-                fragmentIndex={fragmentIndex}
-                fragmentsTotal={fragmentsTotal}
-              />
+              {linkTables[item.fieldId] ? (
+                // ⭐ 需求 2：关联字段（Link/DuplexLink）有预取数据 → 只读表格
+                //（标签由 `LinkTableView` 按 `docLabelPrefix` 同口径画出，避免两套标签逻辑）
+                <LinkTableView
+                  table={linkTables[item.fieldId]}
+                  theme={theme}
+                  styleTheme={styleTheme}
+                  locale={locale}
+                  record={record}
+                  contentWidth={contentWidth}
+                  fragmentIndex={fragmentIndex}
+                  fragmentsTotal={fragmentsTotal}
+                  showLabel={payload.showLabels}
+                  labelText={item.label}
+                />
+              ) : (
+                <DocFieldValue
+                  fieldId={item.fieldId}
+                  value={item.value}
+                  record={record}
+                  fieldsById={fieldsById}
+                  theme={styleTheme}
+                  locale={locale}
+                  showLabel={payload.showLabels}
+                  labelText={item.label}
+                  fragmentIndex={fragmentIndex}
+                  fragmentsTotal={fragmentsTotal}
+                />
+              )}
             </div>
           );
         })}

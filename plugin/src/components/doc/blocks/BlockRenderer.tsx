@@ -26,6 +26,7 @@ import type { DocBlock, DocBlockKind, DocTheme, StyleTheme } from '@/config/type
 import type { SdkRecord } from '@/sdk/port';
 import type { FieldMetaLite } from '@/fields/fieldTypes';
 import type { ResolvedBlock, ResolvedPayload } from '@/doc/resolve';
+import type { LinkTable } from '@/doc/linkTable';
 import { getCatalogEntry } from '@/doc/blockCatalog';
 import { logWarn } from '@/utils/log';
 import { styleThemeOf } from '../DocFieldValue';
@@ -75,6 +76,12 @@ export interface DocBlockRenderProps {
   fieldsById: Record<string, FieldMetaLite>;
   /** 内容盒宽度 px */
   contentWidth: number;
+  /**
+   * ⭐ 需求 2：本区块引用的**关联字段** → 预取到的只读表格数据（缺省 = 空）。
+   * 字段组区块（`fieldList` / `keyValueGrid`）据此把 `Link(18)` / `DuplexLink(21)`
+   * 画成只读表格；无数据 → 该字段回退到既有文本呈现（优雅降级）。
+   */
+  linkTables: Record<string, LinkTable>;
 }
 
 /**
@@ -211,6 +218,9 @@ function payloadAs<K extends ResolvedPayload['kind']>(
   return resolved.payload as Extract<ResolvedPayload, { kind: K }>;
 }
 
+/** 共享的空关联表格表（稳定引用，避免每次渲染新对象导致字段组区块无谓重渲染） */
+const NO_LINK_TABLES: Record<string, LinkTable> = {};
+
 function BlockRendererImpl(props: BlockRendererProps): ReactElement | null {
   const { resolved, fragmentIndex, fragmentsTotal, slice, theme, locale, record, fieldsById, contentWidth, style } =
     props;
@@ -229,6 +239,7 @@ function BlockRendererImpl(props: BlockRendererProps): ReactElement | null {
     record,
     fieldsById,
     contentWidth,
+    linkTables: resolved.linkTables ?? NO_LINK_TABLES,
   };
   const rootStyle = rootStyleOf(resolved.block, theme, style);
   const pendingStyle = { ...style };

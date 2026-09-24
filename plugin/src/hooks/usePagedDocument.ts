@@ -39,6 +39,8 @@ import type { EngineBlock } from '@/pagination/engine';
 import { getContentBox } from '@/constants/paper';
 import { defaultDocTheme, defaultPageSetup } from '@/config/defaults';
 import { resolveBlocks, type ResolvedBlock } from '@/doc/resolve';
+import { prefetchLinkTables } from '@/doc/linkTable';
+import type { LinkTable, LinkTablePrefetchAccess, LinkTablePrefetchDeps } from '@/doc/linkTable';
 import { logError, logWarn } from '@/utils/log';
 
 /** 字体就绪等待上限 ms（§13.2 与 §21.10-⑦ 的 3s 统一口径） */
@@ -75,6 +77,14 @@ export interface UsePagedDocumentDeps {
   awaitFonts?: () => Promise<boolean>;
   /** @deprecated 单页长页后不再渲染离屏宿主；保留仅为兼容既有测试注入。 */
   renderHost?: RenderPagedHost;
+  /**
+   * ⭐ 需求 2：关联字段（`Link` / `DuplexLink`）只读表格的**预取依赖**。
+   *
+   * 缺省（不传）→ 走生产实现：动态 import `@/sdk/linkedRecords`，按 `tableId` 解析只读访问能力。
+   * 注入后（测试）**完全不会加载 SDK**，并可用可控 stub 精确断言时序（过期守卫）与值。
+   * 生产/注入两种情况下，预取都**只读**、并发受信号量约束、失败一律降级（不抛）。
+   */
+  linkSource?: LinkTablePrefetchDeps;
   /** 错误出口（默认 `logError`） */
   onError?: (scope: string, err: unknown, ctx?: Record<string, unknown>) => void;
 }
@@ -90,6 +100,13 @@ export interface UsePagedDocumentArgs {
   fields: ReadonlyArray<FieldMetaLite>;
   /** 语言环境（参与 resolve 的 payloadHash） */
   locale: string;
+  /**
+   * 当前表格 id（生产由 `env.tableId` 传入）。
+   *
+   * ⚠️ 仅用于需求 2 的**关联表格预取**：解析目标表句柄必须先知道「当前是哪张表」。
+   * 缺省 / 空 → 不预取（块路径完全不受影响）。
+   */
+  tableId?: string | null;
   /** 是否启用（抽屉未打开 / 无记录时 false → 不复位、置空产物） */
   enabled: boolean;
   /** 注入依赖（缺省全生产实现；应保持引用稳定） */
@@ -116,6 +133,33 @@ export interface UsePagedDocumentResult {
 /** 空文档产物（`totalPages = 0` → 渲染层出空态） */
 export function emptyPagedDocument(): PagedDocument {
   return { pages: [], totalPages: 0, fontReady: true, degraded: false };
+}
+
+/** 共享的空关联表格表（**稳定引用**，避免「无关联数据」时每轮渲染都换新 Map 触发重算） */
+const EMPTY_LINK_TABLE_MAP: ReadonlyMap<string, LinkTable> = new Map<string, LinkTable>();
+
+/**
+ * 生产缺省的关联表格只读访问能力解析器。
+ *
+ * ⚠️ **动态 import `@/sdk/linkedRecords`**（与 `useImportedDoc.resolveSdkCellReader` 同款理由）：
+ * 单测注入 `linkSource.resolveAccess` 时本函数根本不会被调用，也就**不会加载 SDK**
+ * （jsdom 下加载 SDK 会产生未处理 rejection）。
+ */
+async function resolveProductionLinkAccess(
+  tableId: string | null,
+  record: SdkRecord | null,
+): Promise<LinkTablePrefetchAccess | null> {
+  if (typeof tableId !== 'string' || tableId === '') return null;
+  const { resolveSdkLinkTableSource } = await import('@/sdk/linkedRecords');
+  const source = await resolveSdkLinkTableSource(tableId, record);
+  if (!source) return null;
+  return {
+    reader: source.reader,
+    getTargetFieldMetas: (targetTableId: string) =>
+      source.getTargetFieldMetas(targetTableId) as Promise<ReadonlyArray<unknown>>,
+    getTargetRow: (targetTableId: string, rowRecordId: string) =>
+      source.getTargetRow(targetTableId, rowRecordId),
+  };
 }
 
 /**
@@ -207,10 +251,18 @@ export function toEngineBlock(block: ResolvedBlock): EngineBlock {
 export function usePagedDocument(args: UsePagedDocumentArgs): UsePagedDocumentResult {
   const { template, record, fields, locale, enabled, deps } = args;
   const recordId = args.recordId ?? null;
+  const tableId = args.tableId ?? null;
 
   const [pagedDoc, setPagedDoc] = useState<PagedDocument>(emptyPagedDocument);
   /** 字体迟到就绪后的重算触发（仅递增，不参与计算） */
   const [fontEpoch, setFontEpoch] = useState(0);
+  /**
+   * ⭐ 需求 2：关联字段 → **预取到的只读表格**（作为**纯输入**注入 `resolveBlocks`）。
+   *
+   * 初始为空 → 首帧先按「无关联数据」渲染（文本/单据表格回退），预取完成后升级为只读表格。
+   * 记录切换时由预取 effect **立即清空**，绝不让上一个记录的表格留在新记录上（见该 effect 注释）。
+   */
+  const [linkedRecords, setLinkedRecords] = useState<ReadonlyMap<string, LinkTable>>(EMPTY_LINK_TABLE_MAP);
 
   // 最新 deps（ref 持有，避免因 deps 对象身份变化反复重跑）
   const depsRef = useRef(deps);
@@ -220,14 +272,19 @@ export function usePagedDocument(args: UsePagedDocumentArgs): UsePagedDocumentRe
 
   /** 运行序号：每次 effect 重跑自增；过期链路据此自我作废（守卫 ①） */
   const runSeqRef = useRef(0);
+  /** 关联表格预取的**独立**运行序号（与字体链路解耦：两条异步链各有自己的守卫序号） */
+  const linkRunSeqRef = useRef(0);
   /** 是否已安排「字体就绪重算」（防重复订阅） */
   const fontPendingRef = useRef(false);
 
   const fieldsById = useMemo(() => indexFields(fields), [fields]);
 
   const resolvedBlocks = useMemo<ResolvedBlock[]>(
-    () => (enabled ? resolveBlocks({ blocks: template?.blocks ?? [], record, fields, locale }) : []),
-    [enabled, template, record, fields, locale],
+    () =>
+      enabled
+        ? resolveBlocks({ blocks: template?.blocks ?? [], record, fields, locale, linkedRecords })
+        : [],
+    [enabled, template, record, fields, locale, linkedRecords],
   );
 
   const blocksById = useMemo(() => {
@@ -243,6 +300,78 @@ export function usePagedDocument(args: UsePagedDocumentArgs): UsePagedDocumentRe
     [pageSetup],
   );
   const contentWidth = contentBox.width;
+
+  /**
+   * ⭐ 需求 2：**关联表格预取**（异步 IO 只在此处发生，`resolveBlocks` 保持同步纯函数）。
+   *
+   * 三条必须守住的工程点（否则是「用户看得见但不报错」的静默故障）：
+   *  1. **过期响应不得覆盖新记录**：沿用本项目既有的 `runSeqRef + cancelled` **双守卫**模式
+   *     （见 `linkRunSeqRef` / `cancelled` / `active()`）。⚠️ 这里用**独立**的 `linkRunSeqRef`
+   *     —— 字体链路与本链路是两条互不相干的异步链，共用一个序号会互相作废（一方重跑把另一方
+   *     的进行中结果判为过期）。**双守卫意味着「只删一处」不一定变红，改动时勿以「测试绿了」为据**。
+   *  2. **记录切换即清空**：`record` 变化的瞬间**同步**把上一轮的表格清空（`setLinkedRecords`），
+   *     绝不出现「新记录配旧关联表」的错配（且不报错）。
+   *  3. **失败一律降级**：无 `tableId` / SDK 不可用 / 解析失败 / 预取失败 → 保持空表 →
+   *     渲染层回退到既有文本呈现，**不抛错、不白屏**。
+   *
+   * 依赖数组**不得漏项**：漏 `record` / `recordId` → 切换记录不重取（展示错记录的关联表）；
+   * 漏 `template` → 模板改了但关联表没重算；漏 `fields` → 字段类型判定用旧表。
+   */
+  useEffect(() => {
+    // 守卫 ① 的一半：作废上一轮预取
+    const seq = linkRunSeqRef.current + 1;
+    linkRunSeqRef.current = seq;
+    let cancelled = false; // 守卫 ②：本轮被作废（重跑 / 卸载）时置位
+    const active = (): boolean => !cancelled && linkRunSeqRef.current === seq;
+
+    // ⭐ 立刻清空：不能让「上一个记录的关联表格」在本轮结果到达前继续显示
+    setLinkedRecords((prev) => (prev.size === 0 ? prev : EMPTY_LINK_TABLE_MAP));
+
+    if (!enabled) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void (async () => {
+      const currentDeps = depsRef.current ?? {};
+      const onError = currentDeps.onError ?? logError;
+      const linkSource = currentDeps.linkSource;
+
+      try {
+        const access = linkSource?.resolveAccess
+          ? await linkSource.resolveAccess(tableId, record)
+          : await resolveProductionLinkAccess(tableId, record);
+        if (!active() || !access) return;
+
+        const tables = await prefetchLinkTables({
+          blocks: template?.blocks ?? [],
+          fields,
+          recordId: recordId ?? '',
+          access,
+          maxRows: linkSource?.maxRows,
+          concurrency: linkSource?.concurrency,
+          maxLinkFields: linkSource?.maxLinkFields,
+          isActive: active,
+          onWarn: (scope, message, ctx) => logWarn(scope, message, ctx),
+        });
+        // ⭐ 过期响应守卫：切换记录后，上一轮的表格**绝不**落到新记录上
+        if (!active()) return;
+        setLinkedRecords(tables.size === 0 ? EMPTY_LINK_TABLE_MAP : tables);
+      } catch (err) {
+        // 过期链路的失败同样丢弃（不得用旧错误覆盖新内容）
+        if (!active()) return;
+        onError('doc.linkTables', err, { step: 'prefetch' });
+        // 降级：保持空表（渲染层回退文本呈现），不抛
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // ⚠️ **不**依赖 `fontEpoch` / `resolvedBlocks`：字体重算与分页产物变化都不需要重取关联数据，
+    //    把二者写进来会造成「字体就绪 → 再打一轮关联请求」的白白浪费。
+  }, [enabled, template, record, recordId, fields, tableId]);
 
   useEffect(() => {
     // 作废上一个链路（切换记录 / 关闭 / 重算）

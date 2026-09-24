@@ -230,14 +230,22 @@ export function getOperatorLabel(operator: FilterOperator, type?: FieldTypeValue
   return FILTER_OPERATOR_LABEL[operator] ?? operator;
 }
 
-/** 值输入控件形态（§22.3 UI 降级规则 4） */
+/**
+ * 值输入控件形态（§22.3 UI 降级规则 4）。
+ *
+ * ⚠️ `'select'`（单选）与 `'multiSelect'`（多选）**刻意分开**：
+ *    二者值形态不同——单选写回单个**选项名文本**（`string`），多选写回**选项名数组**（`string[]`）。
+ *    早先版本把 MultiSelect 也映射成 `'select'`，导致多选字段在 UI 上退化为「只能选一个值」，
+ *    与原生多选「可多选」语义不符。此处区分后由 `FilterValueInput` 分派到不同控件。
+ */
 export type FilterValueInputKind =
   | 'none' // 无值输入（附件 / 未知类型 / 不可筛）
   | 'text' // 单行文本
   | 'number' // 数字输入
   | 'date' // 日期选择器
   | 'boolean' // 是 / 否
-  | 'select'; // 选项下拉（来自 meta.property.options[].name）
+  | 'select' // 单选下拉（来自 meta.property.options[].name，值为单个 name）
+  | 'multiSelect'; // 多选下拉（值为 name 数组，可多选）
 
 const VALUE_INPUT_KIND_BY_TYPE: Readonly<Record<number, FilterValueInputKind>> = {
   [FieldType.Text]: 'text',
@@ -250,7 +258,7 @@ const VALUE_INPUT_KIND_BY_TYPE: Readonly<Record<number, FilterValueInputKind>> =
   [FieldType.Rating]: 'number',
   [FieldType.Progress]: 'number',
   [FieldType.SingleSelect]: 'select',
-  [FieldType.MultiSelect]: 'select',
+  [FieldType.MultiSelect]: 'multiSelect',
   [FieldType.DateTime]: 'date',
   [FieldType.CreatedTime]: 'date',
   [FieldType.ModifiedTime]: 'date',

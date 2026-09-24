@@ -210,7 +210,9 @@ describe('filter/operatorMatrix · 值输入 / 标签 / 提示（供 F4）', () 
     expect(getValueInputKind(FieldType.DateTime)).toBe('date');
     expect(getValueInputKind(FieldType.Checkbox)).toBe('boolean');
     expect(getValueInputKind(FieldType.SingleSelect)).toBe('select');
-    expect(getValueInputKind(FieldType.MultiSelect)).toBe('select');
+    // ⭐ req1 变更：多选由 'select' 改为专用 'multiSelect'（值形态 = name 数组，可多选）。
+    //    原断言 `toBe('select')` 锁的是「多选退化为单选控件」的旧行为，已按新语义更新。
+    expect(getValueInputKind(FieldType.MultiSelect)).toBe('multiSelect');
     expect(getValueInputKind(FieldType.Attachment)).toBe('none');
     expect(getValueInputKind(99999 as FieldTypeValue)).toBe('none');
   });

@@ -12,6 +12,7 @@ import type { ConfigRepository, ConfigSource, SaveResult } from '@/config/Config
 import type { EnvSnapshot } from '@/sdk/env';
 import type { FieldMetaLite } from '@/fields/fieldTypes';
 import type { PageResult, RecordDataSource } from '@/data/RecordDataSource';
+import { resolveTotalInfo } from '@/data/RecordDataSource';
 import { appendUniqueRecords } from '@/data/recordPages';
 import { logError } from '@/utils/log';
 import { formatError } from '@/utils/errorText';
@@ -59,6 +60,12 @@ export interface InitPayload {
   repository: ConfigRepository;
   firstPage: PageResult;
   total: number;
+  /**
+   * 总数是否可信（区分「真的是 0」与「取不到」）。
+   * `false` 时文案层必须退化为「已加载 L 条」/「已在已加载的 L 条中筛选」，
+   * **绝不**允许出现「共 N 条」「已在全部 N 条中筛选」这类谎报全量的措辞。
+   */
+  totalKnown: boolean;
 }
 
 export interface ViewState {
@@ -78,9 +85,18 @@ export interface ViewState {
 
   records: SdkRecord[];
   total: number;
+  /** 总数是否可信（见 `InitPayload.totalKnown`）；`false` 时文案层不得声称全量 */
+  totalKnown: boolean;
   hasMore: boolean;
   nextPageToken: string | null;
   loadingMore: boolean;
+  /**
+   * 加载代号（generation）。每次 `refresh()` 或显式取消都会自增；
+   * `loadMore` 每批前后校验，使**在途批次作废**——杜绝 refresh 与在途 loadAll 互相污染。
+   */
+  loadGeneration: number;
+  /** 最近一次 `loadMore` 是否失败（供「加载全部」循环立即中止 + 提示，不静默继续） */
+  loadMoreFailed: boolean;
 
   config: CardViewConfig | null;
   configSource: ConfigSource;
@@ -110,6 +126,8 @@ export interface ViewState {
   refresh: () => Promise<void>;
   /** T10：滚动增量加载（取下一页；去重追加；并发 / 末页自动抑制） */
   loadMore: () => Promise<void>;
+  /** 使在途批次作废（自增加载代号）；用于取消「加载全部」或条件重置、刷新 */
+  bumpLoadGeneration: () => void;
   /** T11：保存配置（复用初始化时的仓储实例；成功后同步 `config`） */
   persistConfig: (config: CardViewConfig) => Promise<SaveResult>;
 }
@@ -134,9 +152,13 @@ export const useViewStore = create<ViewState>((set, get) => ({
 
   records: [],
   total: 0,
+  // 默认 true：与历史文案口径一致（既有测试基线）；真实「未知」由 `useCardViewInit` 依数据源显式写入
+  totalKnown: true,
   hasMore: false,
   nextPageToken: null,
   loadingMore: false,
+  loadGeneration: 0,
+  loadMoreFailed: false,
 
   config: null,
   configSource: 'default',
@@ -185,6 +207,9 @@ export const useViewStore = create<ViewState>((set, get) => ({
       hasMore: payload.firstPage.hasMore,
       nextPageToken: payload.firstPage.pageToken,
       total: payload.total,
+      totalKnown: payload.totalKnown !== false,
+      loadingMore: false,
+      loadMoreFailed: false,
       errorMessage: null,
       errorStep: null,
       errorProbe: null,
@@ -212,18 +237,23 @@ export const useViewStore = create<ViewState>((set, get) => ({
   dismissProvisioned: () => set({ provisionedFromTemplate: false }),
 
   refresh: async () => {
-    const { dataSource, env } = get();
+    const { dataSource, env, loadGeneration } = get();
     if (!dataSource || !env) return;
-    set({ loadingMore: true });
+    // ⭐ 自增加载代号：使在途的 loadAll / 滚动增量批次**作废**，避免与本次刷新互相污染
+    const gen = loadGeneration + 1;
+    set({ loadingMore: true, loadGeneration: gen, loadMoreFailed: false });
     try {
       dataSource.clearCache();
       const page = await dataSource.loadPage({ viewId: env.viewId, pageSize: REFRESH_PAGE_SIZE });
-      const total = await dataSource.count();
+      if (get().loadGeneration !== gen) return; // 已被更新的刷新取代 → 不覆盖
+      const { total, totalKnown } = await resolveTotalInfo(dataSource, page);
+      if (get().loadGeneration !== gen) return;
       set({
         records: page.records,
         hasMore: page.hasMore,
         nextPageToken: page.pageToken,
         total,
+        totalKnown,
         loadingMore: false,
       });
     } catch (err) {
@@ -238,26 +268,43 @@ export const useViewStore = create<ViewState>((set, get) => ({
   },
 
   loadMore: async () => {
-    const { dataSource, env, nextPageToken, hasMore, loadingMore } = get();
+    const { dataSource, env, nextPageToken, hasMore, loadingMore, loadGeneration } = get();
     if (!dataSource || !env || !hasMore || loadingMore) return;
-    set({ loadingMore: true });
+    // ⭐ 记录本次批次所属代号；回填前校验，一旦刷新 / 取消把代号推进，本批结果即作废
+    const gen = loadGeneration;
+    set({ loadingMore: true, loadMoreFailed: false });
     try {
       const page = await dataSource.loadPage({
         viewId: env.viewId,
         pageSize: DEFAULT_PAGE_SIZE,
         pageToken: nextPageToken ?? undefined,
       });
+      if (get().loadGeneration !== gen) {
+        // 作废：不追加记录、不推进游标（保持状态自洽），仅解除阻塞
+        set({ loadingMore: false });
+        return;
+      }
       set((state) => ({
         records: appendUniqueRecords(state.records, page.records),
         hasMore: page.hasMore,
         nextPageToken: page.pageToken,
         loadingMore: false,
+        ...(typeof page.total === 'number' && Number.isFinite(page.total)
+          ? { total: Math.max(0, Math.trunc(page.total)), totalKnown: true }
+          : {}),
       }));
     } catch (err) {
       logError('state.loadMore', err);
-      set({ loadingMore: false });
+      if (get().loadGeneration !== gen) {
+        set({ loadingMore: false });
+        return;
+      }
+      // ⭐ 失败必须可被上层感知（loadMoreFailed），否则「加载全部」循环会以为成功而空转
+      set({ loadingMore: false, loadMoreFailed: true });
     }
   },
+
+  bumpLoadGeneration: () => set((state) => ({ loadGeneration: state.loadGeneration + 1 })),
 
   persistConfig: async (config) => {
     const { repository, env } = get();

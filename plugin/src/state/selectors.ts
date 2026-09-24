@@ -97,13 +97,38 @@ export function selectRowCount(itemCount: number, columns: number): number {
   return Math.ceil(itemCount / columns);
 }
 
+/** 非负整数收敛（脏数据 / NaN / 负数 → 0） */
+function toNonNegInt(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.trunc(value));
+}
+
+/**
+ * 分母口径：是否可用 `total` 作为「全量」分母。
+ *
+ * 两条否决条件（任一成立则退回 `loaded` 口径）：
+ * 1. `totalKnown === false`（总数取不到）—— 绝不能谎报「共 0 条」；
+ * 2. `total < loaded`（脏数据 / 陈旧总数）—— 避免出现「已加载 200 / 共 100」的反向矛盾。
+ *
+ * 默认 `totalKnown` 视作 true，以保持既有调用点 / 测试基线逐字不变。
+ */
+function isKnownTotal(total: number, loaded: number, totalKnown: boolean | undefined): boolean {
+  return totalKnown !== false && toNonNegInt(total) >= toNonNegInt(loaded);
+}
+
 /** 记录总数文案（04 §5.1.2：「共 1,248 条」/ 筛选时「共 N 条（已筛选 M 条）」） */
-export function selectCountLabel(total: number, loaded: number, filtered: boolean): string {
+export function selectCountLabel(total: number, loaded: number, filtered: boolean, totalKnown = true): string {
   const group = (value: number): string => value.toLocaleString('en-US');
-  if (total > 0) {
-    return filtered ? `共 ${group(total)} 条（已筛选 ${group(loaded)} 条）` : `共 ${group(total)} 条`;
+  const safeTotal = toNonNegInt(total);
+  const safeLoaded = toNonNegInt(loaded);
+  const known = totalKnown !== false;
+
+  if (known && safeTotal >= safeLoaded && safeTotal > 0) {
+    return filtered ? `共 ${group(safeTotal)} 条（已筛选 ${group(safeLoaded)} 条）` : `共 ${group(safeTotal)} 条`;
   }
-  return loaded > 0 ? `已加载 ${group(loaded)} 条` : '共 0 条';
+  // 总数未知 / 不可信 → 只报「已加载」，绝不用「共 N 条」
+  if (safeLoaded > 0) return `已加载 ${group(safeLoaded)} 条`;
+  return known ? '共 0 条' : '已加载 0 条';
 }
 
 /**
@@ -297,6 +322,12 @@ export interface FilterScopeLabelInput {
    * 缺省 / 为 0 时**文案与旧版逐字一致**（F3 既有断言锁定）。
    */
   invalidCount?: number;
+  /**
+   * 总数是否可信（`ViewStore.totalKnown`）。
+   * `false` 时**必须**去掉「共 0 条」前缀，退化为「已在已加载的 L 条中筛选，命中 M 条」
+   * （`!hasMore` 时用「已在全部 L 条中筛选」）。缺省视作 `true`（保持既有测试基线）。
+   */
+  totalKnown?: boolean;
 }
 
 /**
@@ -362,16 +393,24 @@ export function countInvalidConditions(
  */
 export function selectFilterScopeLabel(input: FilterScopeLabelInput): string {
   const narrowed = input.hasFilter || input.hasSearch;
-  if (!narrowed) return selectCountLabel(input.total, input.loaded, false);
+  if (!narrowed) return selectCountLabel(input.total, input.loaded, false, input.totalKnown);
 
-  const total = groupCount(input.total);
   const matched = groupCount(input.matched);
   const invalidSuffix = invalidCountSuffix(input.invalidCount ?? 0);
-  if (!input.hasMore) {
-    return `共 ${total} 条（已筛选 ${matched} 条）${invalidSuffix}`;
-  }
   const loaded = groupCount(input.loaded);
-  return `共 ${total} 条 · 已在已加载的 ${loaded} 条中筛选，命中 ${matched} 条${invalidSuffix}`;
+
+  // 总数可信且不小于已加载 → 沿用既有「共 N 条」口径（逐字不变）
+  if (isKnownTotal(input.total, input.loaded, input.totalKnown)) {
+    const total = groupCount(input.total);
+    if (!input.hasMore) return `共 ${total} 条（已筛选 ${matched} 条）${invalidSuffix}`;
+    return `共 ${total} 条 · 已在已加载的 ${loaded} 条中筛选，命中 ${matched} 条${invalidSuffix}`;
+  }
+
+  // ⭐ 总数未知 / 不可信 → 用已加载当分母，**绝不**出现「共 0 条」这类谎报
+  if (input.hasMore) {
+    return `已在已加载的 ${loaded} 条中筛选，命中 ${matched} 条${invalidSuffix}`;
+  }
+  return `已在全部 ${loaded} 条中筛选，命中 ${matched} 条${invalidSuffix}`;
 }
 
 /** 「加载全部并重新筛选」升级入口文案（唯一来源，UI 与单测共用） */
@@ -404,6 +443,17 @@ export interface FilterScopeStatusInput {
    * 用户看到的是全部记录，只显示「命中 N 条」会让他以为筛选生效了。
    */
   invalidCount?: number;
+  /**
+   * 总数是否可信（`ViewStore.totalKnown`）。`false` 时范围前缀去掉「/ 共 N 条」，
+   * 退化为「已在已加载的 L 条中筛选」（`!hasMore` 时「已在全部 L 条中筛选」）。
+   * 缺省视作 `true`（保持既有测试基线逐字不变）。
+   */
+  totalKnown?: boolean;
+  /**
+   * 「静默全量」：为 `true` 时不显示进度文案（数据量小、耗时可忽略）。
+   * 仍照常渲染状态行与「未加载全部」提示，只是不复述逐批进度。
+   */
+  loadingAllSilent?: boolean;
 }
 
 /** `selectFilterScopeStatus` 的返回值（状态行可直接渲染，无需再拼文案） */
@@ -453,22 +503,27 @@ export function selectFilterScopeStatus(input: FilterScopeStatusInput): FilterSc
     };
   }
 
+  const known = isKnownTotal(input.total, input.loaded, input.totalKnown);
   const verb = hasFilter ? '筛选' : '搜索';
   const total = groupCount(input.total);
   const loaded = groupCount(input.loaded);
   const matched = groupCount(hasFilter ? input.filterMatched : input.visible);
 
-  // 范围前缀：诚实区分「部分集合」与「全量集合」——这是不谎报全量的第一道保险
-  const scopePrefix = hasMore
-    ? `已在已加载的 ${loaded} / 共 ${total} 条中${verb}`
-    : `已在全部 ${total} 条中${verb}`;
+  // 范围前缀：诚实区分「部分集合」与「全量集合」；总数未知时**不得**出现「共 N 条」
+  const scopePrefix = known
+    ? hasMore
+      ? `已在已加载的 ${loaded} / 共 ${total} 条中${verb}`
+      : `已在全部 ${total} 条中${verb}`
+    : hasMore
+      ? `已在已加载的 ${loaded} 条中${verb}`
+      : `已在全部 ${loaded} 条中${verb}`;
   // 叠加搜索时补一句最终可见数，避免用户误以为「命中 = 屏幕上看到的条数」
   const scopeTail = hasFilter && hasSearch ? `，命中 ${matched} 条（叠加搜索后 ${groupCount(input.visible)} 条）` : `，命中 ${matched} 条`;
 
-  // 升级进度（§22.11.3：本路径约 50 次请求 / 10–30s，**必须有进度提示**）
+  // 升级进度（§22.11.3：本路径约 50 次请求 / 10–30s，**必须有进度提示**；静默模式除外）
   let progressText: string | null = null;
-  if (loadingAll) {
-    const base = `已加载 ${loaded} / 共 ${total}`;
+  if (loadingAll && input.loadingAllSilent !== true) {
+    const base = known ? `已加载 ${loaded} / 共 ${total}` : `已加载 ${loaded}`;
     // 只有**确曾记录过起点**且确实多拉到记录时才报「本次新增」；
     // 起点未知（0 / 缺失 / 脏数据）或 delta ≤ 0 时一律省略——不知道的事就不说。
     const delta = Number.isFinite(input.loaded) ? input.loaded - startedFrom : Number.NaN;

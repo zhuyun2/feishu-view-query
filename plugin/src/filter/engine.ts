@@ -180,16 +180,39 @@ function matchIs(nv: NormalizedValue, value: unknown): boolean {
 }
 
 /**
+ * `contains` 的关键字集合。
+ *
+ * ⭐ **数组值 = 多选（或成员/附件等）的多值条件**：每个非空元素各自成为一个关键字，
+ *    语义为「**任一关键字命中即命中**」（与原生多维表格多选「包含」一致）。
+ *    ⚠️ 关键：**绝不能**把数组用 `、` 拼成一个关键字（旧行为）——那样
+ *    `['甲','乙']` 会变成关键字 `'甲、乙'`，与任何**单个**选项文本都不构成子串关系，
+ *    于是「选了多个选项反而一条都筛不到」，且**不报任何错**（静默 false negative）。
+ *    这正是主理人 2026-09-23 裁定修复的缺陷。
+ * - 单值：1 个关键字（行为与修复前逐字等价）。
+ * - 全为空串 / 空数组 → 空集合（调用方在此之前已按「未填写」判 `invalid`，记录保留）。
+ */
+function toContainsKeywords(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => toText(item)).filter((text) => text.trim() !== '');
+  }
+  const single = toText(value);
+  return single.trim() === '' ? [] : [single];
+}
+
+/**
  * `contains`（包含，**区分大小写**）。
  * 多值语义（多选 / 成员 / 附件 / 关联）：**任一项命中即命中**（原生多选「包含」语义）；
  * 单值回落 `nv.text.includes(kw)`。
  */
-function matchContains(nv: NormalizedValue, keyword: string): boolean {
+function matchContains(nv: NormalizedValue, value: unknown): boolean {
+  const keywords = toContainsKeywords(value);
+  if (keywords.length === 0) return false;
   const items = nv.items;
   if (Array.isArray(items) && items.length > 0) {
-    return items.some((item) => item.text.includes(keyword));
+    return items.some((item) => keywords.some((keyword) => item.text.includes(keyword)));
   }
-  return !nv.isEmpty && nv.text.includes(keyword);
+  if (nv.isEmpty) return false;
+  return keywords.some((keyword) => nv.text.includes(keyword));
 }
 
 /**
@@ -300,7 +323,10 @@ function isTypeOperatorMatch(
 function isBlankValue(value: unknown): boolean {
   if (value === undefined || value === null) return true;
   if (typeof value === 'string') return value.trim() === '';
-  if (Array.isArray(value)) return value.length === 0;
+  // 数组：空数组为空；**全为空的数组**（如 `['', '  ']`）同样视为「未填写」——
+  // 否则「多选条件选了空串」会走进 `matchContains` 的关键字集合为空分支，
+  // 判 noMatch 把记录筛光（数据可见性优先：语义不成立 → 应判 invalid 跳过）。
+  if (Array.isArray(value)) return value.length === 0 || value.every((item) => isBlankValue(item));
   return false;
 }
 
@@ -400,6 +426,18 @@ export function evaluateConditionState(
   //    典型场景：新建条件行尚未填值；`is ''` 若被当合法，会对**全部记录**算出 noMatch → 静默筛空。
   if (!isValidConditionValue(cond)) return 'invalid';
 
+  // ⭐ 「包含 / 不包含」的值**无法构成任何关键字**时（如对象、纯空白之外的不可读值）→ 同判 invalid。
+  //    否则 `toContainsKeywords` 得空集合 → `matchContains` 恒 `false` → **全部记录被筛掉且不报错**
+  //    （与上面被消灭的「空值筛空」同族）。可达性：持久化路径经 `sanitize.matchesTextList` 只收
+  //    `string | string[]`，故**不可从配置触发**；但内存中未经 sanitize 的调用方可以走到，
+  //    按「语义不可确定 → 判无效、记录保留」的既有原则在此兜住（QA 2026-09-23 提出）。
+  if (
+    (cond.operator === 'contains' || cond.operator === 'doesNotContain') &&
+    toContainsKeywords(cond.value).length === 0
+  ) {
+    return 'invalid';
+  }
+
   if (!record) return 'noMatch';
   let nv: NormalizedValue | null;
   try {
@@ -431,10 +469,10 @@ export function evaluateConditionState(
         // 朴素否定：空值记录「不等于」任何目标值 → **命中**（主理人裁定 §22.10-③）
         return !matchIs(nv, cond.value) ? 'match' : 'noMatch';
       case 'contains':
-        return matchContains(nv, toText(cond.value)) ? 'match' : 'noMatch';
+        return matchContains(nv, cond.value) ? 'match' : 'noMatch';
       case 'doesNotContain':
         // 朴素否定：空值记录「不包含」任何关键词 → **命中**
-        return !matchContains(nv, toText(cond.value)) ? 'match' : 'noMatch';
+        return !matchContains(nv, cond.value) ? 'match' : 'noMatch';
       case 'isGreater':
       case 'isGreaterEqual':
       case 'isLess':

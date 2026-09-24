@@ -606,7 +606,7 @@ describe('F4 · 值输入控件', () => {
     view.unmount();
   });
 
-  it('单选字段 → 选项下拉来自 meta.property.options（选项名，不含 id）', () => {
+  it('单选字段 → 可搜下拉，候选来自 meta.property.options（选项名，不含 id）', () => {
     const view = mount(
       <FilterConditionRow
         condition={cond('c1', 'f_status', 'is', '进行中')}
@@ -616,11 +616,21 @@ describe('F4 · 值输入控件', () => {
         onRemove={() => undefined}
       />,
     );
-    const select = view.find('filter-value-input') as HTMLSelectElement;
-    const values = Array.from(select.options).map((option) => option.value);
+    // ⭐ req1 机械改动（原断言 619-623）：单选值控件由原生 `<select>` 换成可搜下拉（`FieldSelect`）。
+    //    断言**主语与强度不变**（候选的**选项名**集合 + 当前选中值），只把驱动方式从
+    //    `select.options` 换成「展开后读候选项 data-option-value」。
+    const combo = view.find('filter-value-input') as HTMLInputElement;
+    expect(combo.tagName).toBe('INPUT');
+    expect(combo.getAttribute('role')).toBe('combobox');
+    expect(combo.value).toBe('进行中'); // 当前值 = 选项显示名
+
+    clickButton(combo);
+    const values = view
+      .findAll('filter-value-input-option')
+      .map((el) => el.getAttribute('data-option-value') ?? '');
     expect(values).toContain('进行中');
     expect(values).toContain('已完成');
-    expect(select.value).toBe('进行中');
+    expect(values).toContain(''); // 「请选择」= 清空
     view.unmount();
   });
 
@@ -640,7 +650,7 @@ describe('F4 · 值输入控件', () => {
     view.unmount();
   });
 
-  it('复选框字段 → 是/否下拉', () => {
+  it('复选框字段 → 是/否下拉（值映射 true/false，候选序列与原生 select 等价）', () => {
     const view = mount(
       <FilterConditionRow
         condition={cond('c1', 'f_flag', 'is', true)}
@@ -650,9 +660,16 @@ describe('F4 · 值输入控件', () => {
         onRemove={() => undefined}
       />,
     );
-    const select = view.find('filter-value-input') as HTMLSelectElement;
-    expect(Array.from(select.options).map((option) => option.value)).toEqual(['', 'true', 'false']);
-    expect(select.value).toBe('true');
+    // ⭐ req1 机械改动（原断言 653-655）：布尔值控件由原生 `<select>` 换成共享 `FieldSelect`。
+    //    断言**主语与强度不变**（候选值序列 `['', 'true', 'false']` + 当前值），只改驱动方式。
+    const combo = view.find('filter-value-input') as HTMLInputElement;
+    expect(combo.tagName).toBe('INPUT');
+    expect(combo.value).toBe('是'); // value === true → 显示「是」
+
+    clickButton(combo);
+    expect(
+      view.findAll('filter-value-input-option').map((el) => el.getAttribute('data-option-value') ?? ''),
+    ).toEqual(['', 'true', 'false']);
     view.unmount();
   });
 

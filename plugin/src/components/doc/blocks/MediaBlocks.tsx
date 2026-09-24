@@ -1,6 +1,10 @@
 /**
  * 媒体组区块渲染器：`image` / `table`（设计文档 §21.2-C / §21.5 / §21.8 M3-T05）。
  *
+ * ⭐ 需求 2（关联字段只读表格化）在本文件新增 {@link LinkTableView}：与 {@link TableView}
+ *    **共用**结构 / 样式 / 测量契约标记，但**只读**（无排序 / 编辑 / 添加 / 配置入口）。
+ *    数据来自 `doc/linkTable.ts`（预取 → 纯输入注入 `resolveBlocks`）。
+ *
  * ⭐ 铁律：单元格里的字段值**一律**走 `<DocFieldValue/>`（`registry.renderDoc()` 的唯一出口），
  *   本文件绝不自己格式化数字/日期/选项（§11「字段值出口」）。
  *
@@ -20,13 +24,15 @@
  */
 import type { CSSProperties, ReactElement } from 'react';
 import { useCallback, useState } from 'react';
-import type { DocTheme } from '@/config/types';
-import type { NormalizedValue } from '@/fields/fieldTypes';
+import type { DocTheme, StyleTheme } from '@/config/types';
+import type { FieldMetaLite, NormalizedValue } from '@/fields/fieldTypes';
+import type { SdkRecord } from '@/sdk/port';
 import type {
   ResolvedImagePayload,
   ResolvedTableColumn,
   ResolvedTablePayload,
 } from '@/doc/resolve';
+import type { LinkColumn, LinkTable } from '@/doc/linkTable';
 import type { DocBlockRenderProps } from './BlockRenderer';
 import { DocFieldValue } from '../DocFieldValue';
 
@@ -232,6 +238,17 @@ export function TableView(props: TableViewProps): ReactElement {
     (column) => typeof column.widthPx === 'number' && Number.isFinite(column.widthPx) && column.widthPx > 0,
   );
 
+  /**
+   * 单元格渲染用的字段元数据：以 `fieldsById`（本表字段）为底，再叠加**列自带**的 `meta`。
+   * 需求 2 的 `rowSource = linkedRecords` 注入表格时，列来自**目标表**（`fieldsById` 里没有），
+   * 必须用列自带 `meta` 才能把单元格交给正确的渲染器（否则只能显示缺 meta 占位「—」）。
+   * 常规 `table` 块的列不带 `meta`，此处与历史行为**完全一致**（不改变既有渲染）。
+   */
+  const cellFieldsById: Record<string, FieldMetaLite> = { ...fieldsById };
+  for (const column of payload.columns) {
+    if (column.meta) cellFieldsById[column.fieldId] = column.meta;
+  }
+
   const tableStyle: CSSProperties = {
     width: contentWidth > 0 ? '100%' : undefined,
     borderCollapse: 'collapse',
@@ -289,7 +306,7 @@ export function TableView(props: TableViewProps): ReactElement {
                       fieldId={column.fieldId}
                       value={row.cells[column.fieldId] ?? emptyValue()}
                       record={record}
-                      fieldsById={fieldsById}
+                      fieldsById={cellFieldsById}
                       theme={styleTheme}
                       locale={locale}
                       showLabel={false}
@@ -303,6 +320,190 @@ export function TableView(props: TableViewProps): ReactElement {
           })}
         </tbody>
       </table>
+      {typeof payload.truncated === 'number' && payload.truncated > 0 ? (
+        <div
+          className="cbv-doc-table__more"
+          data-table-more={payload.truncated}
+          style={{
+            color: theme.mutedColor,
+            fontSize: Math.max(10, theme.baseFontSize - 2),
+            lineHeight: theme.lineHeight,
+            paddingTop: CAPTION_GAP,
+          }}
+        >
+          {`+${payload.truncated}`}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ===================== 关联字段的只读表格（需求 2 · 第一阶段） ===================== */
+
+/** `LinkTableView` 入参（字段级渲染：由 `FieldBlocks` 在字段绑定到关联字段且已有数据时调用） */
+export interface LinkTableViewProps {
+  /** 关联表格数据（列 = 目标表「主字段 + 前几个可用字段」；行 = 被关联记录） */
+  table: LinkTable;
+  theme: DocTheme;
+  /** `DocTheme` → `StyleTheme` 桥接结果（交 `DocFieldValue` 用） */
+  styleTheme: StyleTheme;
+  locale: string;
+  /** 当前记录（单元格走 `row.cells`，此处仅作 `DocFieldValue` 的兜底入参） */
+  record: SdkRecord | null;
+  /** 内容盒宽度 px（表格宽度**不得超过**它） */
+  contentWidth: number;
+  fragmentIndex: number;
+  fragmentsTotal: number;
+  /** 是否显示「字段名：」前缀（`fieldList` 的 `showLabels`） */
+  showLabel?: boolean;
+  /** 前缀文本（缺省不显示） */
+  labelText?: string;
+}
+
+/**
+ * ⭐ 关联字段的**只读**表格（与多维表格详情一致的呈现方式，但**不可编辑**）。
+ *
+ * 结构 / 样式**刻意复用** {@link TableView}（同一批 `cbv-doc-table*` 类名 + 内距常量）：
+ *  - 表头 `<thead data-repeat-header>`、数据行 `<tr data-unit-index>` —— **测量契约标记保留**
+ *    （与 `pagination/measurer.ts` 对应；改错会让分页静默出错）；
+ *  - **只读**：没有排序箭头、没有单元格悬停/编辑、没有「+ 添加记录」、没有字段配置入口、
+ *    没有末尾「+」占位行 —— 整棵子树里没有任何交互控件。
+ *  - 宽度：外层 `maxWidth = contentWidth` + 表格 `width:100%` ⇒ **绝不超出内容盒**。
+ *  - 行上限溢出：以「+N」告知（不静默丢行，沿用既有 `+n` 约定）。
+ */
+export function LinkTableView(props: LinkTableViewProps): ReactElement {
+  const {
+    table,
+    theme,
+    styleTheme,
+    locale,
+    record,
+    contentWidth,
+    fragmentIndex,
+    fragmentsTotal,
+    showLabel,
+    labelText,
+  } = props;
+
+  const columns = table.columns;
+  /** 单元格渲染需要**目标表**字段元数据（`fieldsById` 里没有目标表字段） */
+  const cellFieldsById: Record<string, FieldMetaLite> = {};
+  for (const column of columns) {
+    if (column.meta) cellFieldsById[column.fieldId] = column.meta;
+  }
+
+  const tableStyle: CSSProperties = {
+    width: contentWidth > 0 ? '100%' : undefined,
+    borderCollapse: 'collapse',
+    tableLayout: 'auto',
+  };
+
+  // 与 `docLabelPrefix()` 同口径：仅在「显示标签 + 未切分或为首片」时画前缀
+  const prefix =
+    showLabel === true && typeof labelText === 'string' && labelText !== ''
+      ? fragmentsTotal > 1 && fragmentIndex > 0
+        ? ''
+        : `${labelText}：`
+      : '';
+
+  /** 列 → 单元格样式（无显式列宽/对齐：关联表格列宽自适应，但不超内容盒） */
+  function cellStyle(column: LinkColumn): CSSProperties {
+    const columnLike: ResolvedTableColumn = { fieldId: column.fieldId, title: column.label };
+    return cellStyleOf(columnLike, theme);
+  }
+
+  return (
+    <div
+      className="cbv-doc-linktable"
+      data-doc-linktable="true"
+      style={{
+        maxWidth: contentWidth > 0 ? contentWidth : undefined,
+        width: contentWidth > 0 ? '100%' : undefined,
+        boxSizing: 'border-box',
+      }}
+    >
+      {prefix !== '' ? (
+        <div
+          className="cbv-doc-linktable__label"
+          data-link-table-label="true"
+          style={{ color: theme.mutedColor, lineHeight: theme.lineHeight }}
+        >
+          {prefix}
+        </div>
+      ) : null}
+      <table
+        className="cbv-doc-table cbv-doc-table--link"
+        data-table-col-count={columns.length}
+        data-link-table="true"
+        style={tableStyle}
+      >
+        <thead className="cbv-doc-table__head" data-repeat-header="true">
+          <tr>
+            {columns.map((column) => (
+              <th
+                className="cbv-doc-table__th"
+                key={column.fieldId}
+                data-col-field={column.fieldId}
+                scope="col"
+                style={{
+                  ...cellStyle(column),
+                  backgroundColor: HEADER_BACKGROUND,
+                  color: theme.textColor,
+                  fontWeight: theme.headingWeight,
+                }}
+              >
+                {column.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="cbv-doc-table__body">
+          {table.rows.map((row, index) => (
+            <tr
+              className="cbv-doc-table__row"
+              key={`${row.recordId}-${index}`}
+              data-unit-index={index}
+              data-row-index={index}
+              style={{ backgroundColor: index % 2 === 1 ? ZEBRA_BACKGROUND : undefined }}
+            >
+              {columns.map((column) => (
+                <td
+                  className="cbv-doc-table__td"
+                  key={column.fieldId}
+                  data-cell-field={column.fieldId}
+                  style={cellStyle(column)}
+                >
+                  <DocFieldValue
+                    fieldId={column.fieldId}
+                    value={row.cells[column.fieldId] ?? emptyValue()}
+                    record={record}
+                    fieldsById={cellFieldsById}
+                    theme={styleTheme}
+                    locale={locale}
+                    showLabel={false}
+                    fragmentIndex={fragmentIndex}
+                    fragmentsTotal={fragmentsTotal}
+                  />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {typeof table.truncated === 'number' && table.truncated > 0 ? (
+        <div
+          className="cbv-doc-linktable__more"
+          data-link-table-more={table.truncated}
+          style={{
+            color: theme.mutedColor,
+            fontSize: Math.max(10, theme.baseFontSize - 2),
+            lineHeight: theme.lineHeight,
+            paddingTop: CAPTION_GAP,
+          }}
+        >
+          {`+${table.truncated}`}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -22,6 +22,12 @@ import type { DetailConfig, ImportedDocx } from '@/config/types';
 import { createDefaultConfig } from '@/config/defaults';
 import { FieldType, type FieldMetaLite } from '@/fields/fieldTypes';
 import { encodeImportedDocx, MAX_IMPORTED_DOCX_BYTES } from '@/doc/template/storage';
+import { buildTemplateData } from '@/doc/template/buildData';
+import type {
+  BuildTemplateDataArgs,
+  BuildTemplateDataResult,
+  LinkedRecordIdsReader,
+} from '@/doc/template/buildData';
 import {
   extractDocxText,
   FILL_FAILED_PREFIX,
@@ -31,6 +37,7 @@ import {
   xmlToPlainText,
 } from './useImportedDoc';
 import type {
+  BuildDataFn,
   FillDocxFn,
   UseImportedDocArgs,
   UseImportedDocDeps,
@@ -443,4 +450,181 @@ describe('useImportedDoc · 源码级守卫（先剔注释再匹配）', () => {
     // 依赖数组含 importedDocx（漏掉 → 重新上传不刷新）
     expect(code).toMatch(/\[[^\]]*\bimportedDocx\b[^\]]*\]/);
   });
+});
+
+/* ===================== ⑦ ⭐ 需求 2 · docx 循环段：按需注入子记录读取器 ===================== */
+
+/**
+ * ⭐ 需求 2 的「顺带收益」：`buildTemplateData` 的 `readLinkedRecordIds` 此前**未接线**，
+ * 导致 docx 里的循环段（`{#明细}…{/明细}`）恒展开为空。本组用例锁定：
+ *  · 模板含循环段 + 显式注入读取器 → 循环段**展开成行**（值来自读取器，断言具体文本）；
+ *  · 模板含循环段、但生产解析器取不到读取器（无 tableId / SDK 不可用）→ 循环段展开为**空**，
+ *    且 `report.failedReads` **显式报告**（不静默）；
+ *  · 模板**不含**循环段 → **不**去解析子记录读取器（零浪费，避免无谓加载 SDK）；
+ *  · 解析读取器抛错 → 记日志 + 不注入（走「显式报告」路径，不静默）。
+ *
+ * 断言策略：用**真实** `buildTemplateData`（经 `deps.buildData` 包装以捕获 data/report），
+ * 故既能观察「装配结果」，又完整验证了 hook → buildData 的接线。
+ */
+describe('useImportedDoc · ⭐ 需求2 · docx 循环段（按需注入子记录读取器）', () => {
+  const LOOP_FIELDS: FieldMetaLite[] = [
+    { id: 'f_main', name: '主标题', type: FieldType.Text, isPrimary: true },
+    { id: 'f_items', name: '明细', type: FieldType.Link, isPrimary: false },
+    { id: 'f_item_name', name: '子项', type: FieldType.Text, isPrimary: false },
+  ];
+
+  /** 循环段模板：`{#明细}{子项}{/明细}` */
+  const LOOP_TEXT = '{#明细}{子项}{/明细}';
+
+  /** 捕获装配结果的 buildData 包装（内部走真实 buildTemplateData） */
+  function capturingBuildData(sink: { result: BuildTemplateDataResult | null; args: BuildTemplateDataArgs | null }): BuildDataFn {
+    return async (args) => {
+      const result = await buildTemplateData(args);
+      sink.result = result;
+      sink.args = args;
+      return result;
+    };
+  }
+
+  it('⭐ 注入读取器 → 循环段**展开成行**（断言每行具体文本）', async () => {
+    const sink: { result: BuildTemplateDataResult | null; args: BuildTemplateDataArgs | null } = {
+      result: null,
+      args: null,
+    };
+    const readLinkedRecordIds: LinkedRecordIdsReader = async () => ['c1', 'c2'];
+    const readCellString = async (fieldId: string, recordId: string): Promise<string> => {
+      if (fieldId === 'f_item_name') return recordId === 'c1' ? '明细甲' : '明细乙';
+      return '';
+    };
+
+    const harness = mountHook({
+      detail: detailWith({ docSource: 'imported', importedDocx: imported(para(LOOP_TEXT)) }),
+      recordId: 'rA',
+      fields: LOOP_FIELDS,
+      tableId: 't',
+      enabled: true,
+      deps: {
+        buildData: capturingBuildData(sink),
+        extractText: async () => LOOP_TEXT, // 冻结抽取 → 模板文本确定
+        readCellString,
+        readLinkedRecordIds,
+        fill: async () => new Blob([]), // 填充产物不参与本组断言
+      },
+    });
+
+    await poll(() => harness.result().status === 'ready');
+
+    // 正面锚点①：读取器确实被接线进 buildData（同一函数引用）
+    expect(sink.args?.readLinkedRecordIds).toBe(readLinkedRecordIds);
+    // 正面锚点②：循环段确实展开成两行，且行内值来自读取器
+    expect(sink.result?.data['明细']).toEqual([{ 子项: '明细甲' }, { 子项: '明细乙' }]);
+    expect(sink.result?.report.loops).toEqual([{ tag: '明细', fieldId: 'f_items', rows: 2 }]);
+    // 反面锚点：循环展开成功 → 无 failedReads
+    expect(sink.result?.report.failedReads).toEqual([]);
+    harness.unmount();
+  }, 20000);
+
+  it('⭐ 无可用读取器（无 tableId / SDK 不可用）→ 循环段展开为**空** + 显式报告（不静默）', async () => {
+    const sink: { result: BuildTemplateDataResult | null; args: BuildTemplateDataArgs | null } = {
+      result: null,
+      args: null,
+    };
+    const readCellString = async (): Promise<string> => '';
+
+    const harness = mountHook({
+      detail: detailWith({ docSource: 'imported', importedDocx: imported(para(LOOP_TEXT)) }),
+      recordId: 'rA',
+      fields: LOOP_FIELDS,
+      tableId: 't',
+      enabled: true,
+      deps: {
+        buildData: capturingBuildData(sink),
+        extractText: async () => LOOP_TEXT,
+        readCellString,
+        resolveLinkedReader: async () => null, // 生产「取不到读取器」分支（不加载 SDK）
+        fill: async () => new Blob([]),
+      },
+    });
+
+    await poll(() => harness.result().status === 'ready');
+
+    // 反面锚点：未注入读取器 → buildData 收到 undefined
+    expect(sink.args?.readLinkedRecordIds).toBeUndefined();
+    // 循环段展开为空数组……
+    expect(sink.result?.data['明细']).toEqual([]);
+    // ……且**显式报告**失败（不是静默消失）
+    const failed = sink.result?.report.failedReads ?? [];
+    expect(failed.some((item) => item.tag === '明细')).toBe(true);
+    expect(failed.find((item) => item.tag === '明细')?.reason).toContain('未提供子记录读取器');
+    harness.unmount();
+  }, 20000);
+
+  it('模板**不含**循环段 → 不解析子记录读取器（零浪费，避免无谓加载 SDK）', async () => {
+    const sink: { result: BuildTemplateDataResult | null; args: BuildTemplateDataArgs | null } = {
+      result: null,
+      args: null,
+    };
+    const resolveLinkedReader = vi.fn(async (): Promise<LinkedRecordIdsReader | null> => async () => ['x']);
+
+    const harness = mountHook({
+      detail: detailWith({ docSource: 'imported', importedDocx: imported(para('主：{主标题}')) }),
+      recordId: 'rA',
+      fields: LOOP_FIELDS,
+      tableId: 't',
+      enabled: true,
+      deps: {
+        buildData: capturingBuildData(sink),
+        extractText: async () => '主：{主标题}', // 无循环段
+        readCellString: async () => '标题值',
+        resolveLinkedReader,
+        fill: async () => new Blob([]),
+      },
+    });
+
+    await poll(() => harness.result().status === 'ready');
+
+    // 正面锚点：单值占位符确实填了（证明链路真的跑完）
+    expect(sink.result?.data['主标题']).toBe('标题值');
+    // 反面锚点：无循环段 → 根本不该去解析读取器
+    expect(resolveLinkedReader).not.toHaveBeenCalled();
+    expect(sink.args?.readLinkedRecordIds).toBeUndefined();
+    harness.unmount();
+  }, 20000);
+
+  it('解析读取器抛错 → 记日志（不静默）+ 不注入 → 走显式报告路径', async () => {
+    const sink: { result: BuildTemplateDataResult | null; args: BuildTemplateDataArgs | null } = {
+      result: null,
+      args: null,
+    };
+    const onError = vi.fn();
+
+    const harness = mountHook({
+      detail: detailWith({ docSource: 'imported', importedDocx: imported(para(LOOP_TEXT)) }),
+      recordId: 'rA',
+      fields: LOOP_FIELDS,
+      tableId: 't',
+      enabled: true,
+      deps: {
+        buildData: capturingBuildData(sink),
+        extractText: async () => LOOP_TEXT,
+        readCellString: async () => '',
+        resolveLinkedReader: async () => {
+          throw new Error('SDK 不可用-42');
+        },
+        fill: async () => new Blob([]),
+        onError,
+      },
+    });
+
+    await poll(() => harness.result().status === 'ready');
+
+    // 正面锚点：错误确实被上报（带步骤标记），且不静默
+    expect(onError).toHaveBeenCalled();
+    expect(onError.mock.calls[0]?.[0]).toBe('doc.imported');
+    expect(sink.args?.readLinkedRecordIds).toBeUndefined();
+    // 循环段展开为空 + 显式报告（与「无读取器」同一降级路径）
+    expect(sink.result?.data['明细']).toEqual([]);
+    expect((sink.result?.report.failedReads ?? []).some((item) => item.tag === '明细')).toBe(true);
+    harness.unmount();
+  }, 20000);
 });

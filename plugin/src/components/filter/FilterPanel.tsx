@@ -55,6 +55,7 @@ export function FilterPanel({ onApply }: FilterPanelProps): JSX.Element {
   const fields = useViewStore((state) => state.fields);
   const fieldsById = useViewStore((state) => state.fieldsById);
   const total = useViewStore((state) => state.total);
+  const totalKnown = useViewStore((state) => state.totalKnown);
   const hasMore = useViewStore((state) => state.hasMore);
   const layout = useViewStore((state) => state.config?.card ?? null);
 
@@ -77,6 +78,7 @@ export function FilterPanel({ onApply }: FilterPanelProps): JSX.Element {
     () =>
       selectFilterScopeStatus({
         total,
+        totalKnown,
         loaded: records.length,
         filterMatched: visible.filterMatched,
         visible: visible.visible,
@@ -89,6 +91,7 @@ export function FilterPanel({ onApply }: FilterPanelProps): JSX.Element {
       }),
     [
       total,
+      totalKnown,
       records.length,
       visible.filterMatched,
       visible.visible,

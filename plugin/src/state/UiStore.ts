@@ -77,6 +77,11 @@ export interface UiState {
   filterLoadingAll: boolean;
   /** 本次升级**开始时**的已加载条数（供进度条显示「起点 → 当前」） */
   filterLoadAllStartedFrom: number;
+  /**
+   * 「静默全量」：本次加载为静默模式（数据量 ≤ 阈值），不显示进度与取消按钮。
+   * 仅影响 UI 呈现，不影响加载行为本身。
+   */
+  filterLoadAllSilent: boolean;
 
   openEditor(mode?: EditorMode): void;
   closeEditor(): void;
@@ -110,8 +115,11 @@ export interface UiState {
   /** 外部（初始化 / 远端同步）整体替换，**不**置 `filterTouched` */
   replaceFilter(filter: FilterConfig): void;
   setFilterTouched(touched: boolean): void;
-  /** 开始「加载全部并重新筛选」升级；`startedFrom` = 起始已加载条数 */
-  beginFilterLoadAll(startedFrom: number): void;
+  /**
+   * 开始「加载全部并重新筛选」升级；`startedFrom` = 起始已加载条数。
+   * `silent` = 静默模式（数据量 ≤ 阈值时不显示进度 / 取消按钮），缺省 `false`。
+   */
+  beginFilterLoadAll(startedFrom: number, silent?: boolean): void;
   /** 结束升级（成功或失败都必须调用，否则 UI 永久停留在进度态） */
   endFilterLoadAll(): void;
 }
@@ -160,6 +168,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   filterTouched: false,
   filterLoadingAll: false,
   filterLoadAllStartedFrom: 0,
+  filterLoadAllSilent: false,
 
   openEditor: (mode = 'card') => set({ editorOpen: true, editMode: mode }),
   closeEditor: () => set({ editorOpen: false }),
@@ -221,11 +230,12 @@ export const useUiStore = create<UiState>((set, get) => ({
 
   setFilterTouched: (touched) => set({ filterTouched: touched === true }),
 
-  beginFilterLoadAll: (startedFrom) =>
+  beginFilterLoadAll: (startedFrom, silent = false) =>
     set({
       filterLoadingAll: true,
       filterLoadAllStartedFrom: Number.isFinite(startedFrom) ? Math.max(0, Math.trunc(startedFrom)) : 0,
+      filterLoadAllSilent: silent === true,
     }),
 
-  endFilterLoadAll: () => set({ filterLoadingAll: false }),
+  endFilterLoadAll: () => set({ filterLoadingAll: false, filterLoadAllSilent: false }),
 }));

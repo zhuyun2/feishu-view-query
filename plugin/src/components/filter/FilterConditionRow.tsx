@@ -257,6 +257,9 @@ export function FilterConditionRow({
         value={condition.fieldId}
         onChange={(next) => onChange(resolveConditionOnFieldChange(condition, next, fieldsById))}
         searchable
+        // ⭐ req1：显式开启「可搜索」视觉提示（浮层顶部提示行 + 触发体 🔍）——
+        //    此前用户反馈「看不出字段下拉能搜」。纯视觉提示，交互/onChange 一字未改。
+        searchableHint
         testId="filter-field-select"
         ariaLabel="筛选字段"
         invalid={!effective}

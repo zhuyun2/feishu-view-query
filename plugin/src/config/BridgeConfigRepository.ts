@@ -20,7 +20,7 @@
 import { backupKey, configKey } from '@/constants';
 import type { BridgeStore } from '@/sdk/base';
 import { formatError } from '@/utils/errorText';
-import { logError } from '@/utils/log';
+import { logError, logWarn } from '@/utils/log';
 import {
   refreshReadOnlyFromPayload,
   resolveLoadedConfig,
@@ -114,7 +114,30 @@ export class BridgeConfigRepository implements ConfigRepository {
         viewId,
         source: 'bridge',
         backup: (backupRaw) => {
-          void this.store.setData(backupKey(viewId, Date.now()), backupRaw);
+          const key = backupKey(viewId, Date.now());
+          // ⭐ 备份失败必须**在控制台可查**：原本 `void this.store.setData(...)` 会吞掉 rejection
+          //    （unhandled），而损坏横幅声称「已保留了原始数据备份」——备份没写成时那句话是假的。
+          //    ⚠️ 只记录、不改损坏判定行为：同步抛错 / Promise rejection 都不让 `load` 整体失败，
+          //    返回的仍是「损坏回退默认」结果（与现状一致）。
+          try {
+            const written = this.store.setData(key, backupRaw);
+            // 兼容「返回 Promise」的实现：rejection 也要落日志（同步返回 boolean 时此行为 no-op）
+            void Promise.resolve(written).catch((err: unknown) => {
+              logWarn('config.load', '备份写入失败', {
+                phase: 'backup-failed',
+                viewId,
+                backupKey: key,
+                error: formatError(err),
+              });
+            });
+          } catch (err) {
+            logWarn('config.load', '备份写入失败', {
+              phase: 'backup-failed',
+              viewId,
+              backupKey: key,
+              error: formatError(err),
+            });
+          }
         },
       });
       // F5 / D1：记住只读状态（数据损坏 ≠ 介质故障，不触发 F2 切换）。

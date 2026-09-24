@@ -98,6 +98,8 @@ export function DetailDrawer({ pagedDeps, importedDeps }: DetailDrawerProps): JS
     recordId,
     fields,
     locale,
+    // ⭐ 需求 2：关联表格预取需要「当前是哪张表」才能解析目标表句柄
+    tableId,
     enabled: open && record !== null,
     deps: pagedDeps,
   });

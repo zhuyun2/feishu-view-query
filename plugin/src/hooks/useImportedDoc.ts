@@ -35,14 +35,20 @@
  *   `DocxTemplatePreview.tsx` 的注释。
  *
  * ⚠️ 分层：本文件位于 `hooks/`（最上层），允许 import `doc/`；对 SDK 的**值**导入一律
- *   **动态 `import()`**（`pizzip` 抽取、`@/sdk/base` 取表句柄），既避免把大依赖 / SDK 拖进
- *   主入口，也让单测在注入 stub 时**完全不会加载 SDK**（jsdom 下加载 SDK 会产生未处理 rejection）。
+ *   **动态 `import()`**（`pizzip` 抽取、`@/sdk/base` 取表句柄、`@/sdk/linkedRecords` 取关联读取器），
+ *   既避免把大依赖 / SDK 拖进主入口，也让单测在注入 stub 时**完全不会加载 SDK**
+ *   （jsdom 下加载 SDK 会产生未处理 rejection）。
+ *
+ * ⭐ 需求 2 · 顺带收益（2026-09-21）：`buildTemplateData` 的 `readLinkedRecordIds` 此前**未接线**
+ *   → docx 里的循环段（`{#明细}…{/明细}`）**恒展开为空**。现在按需注入（仅当模板含循环段），
+ *   与「关联字段只读表格」共用同一个**只读**读取器。无 tableId / SDK 不可用 → 不注入，
+ *   由 `buildTemplateData` 走「显式报告」路径（**不静默**）。
  */
 import { useEffect, useRef, useState } from 'react';
 import type { DetailConfig, ImportedDocx } from '@/config/types';
 import type { FieldMetaLite } from '@/fields/fieldTypes';
 import { buildTemplateData } from '@/doc/template/buildData';
-import type { BuildTemplateDataArgs, CellStringReader } from '@/doc/template/buildData';
+import type { BuildTemplateDataArgs, CellStringReader, LinkedRecordIdsReader } from '@/doc/template/buildData';
 import { fillDocxTemplate } from '@/doc/template/fill';
 import type { DocxTemplateData } from '@/doc/template/fill';
 import {
@@ -90,10 +96,27 @@ export type ExtractDocxTextFn = (bytes: Uint8Array | ArrayBuffer) => Promise<str
 /** 单元格读取器解析函数签名（缺省 = {@link resolveSdkCellReader}） */
 export type ResolveCellReaderFn = (tableId: string | null) => Promise<CellStringReader | null>;
 
+/**
+ * 子记录 id 读取器解析函数签名（缺省 = {@link resolveSdkLinkedRecordIdsReader}）。
+ *
+ * ⭐ 需求 2 · 顺带收益：与关联字段只读表格**共用同一个读取器**
+ * （`sdk/linkedRecords` 的 `LinkedRecordsReader`），故 docx 循环段不再恒为空。
+ */
+export type ResolveLinkedReaderFn = (
+  tableId: string | null,
+) => Promise<LinkedRecordIdsReader | null>;
+
 /** 可注入依赖（生产全部缺省；测试注入以获得确定性时序 / 值） */
 export interface UseImportedDocDeps {
   /** 单元格显示串读取器；生产缺省由 {@link resolveSdkCellReader} 经 `tableId` 解析 */
   readCellString?: CellStringReader;
+  /**
+   * 循环段子记录 id 读取器；生产缺省由 {@link resolveSdkLinkedRecordIdsReader} 经 `tableId` 解析。
+   *
+   * ⚠️ **仅在模板确实含循环段时**才会去解析（见 {@link hasLoopSection}）：避免为「没有循环段」
+   * 的模板白白解析一次 SDK 依赖（单测里加载真实 SDK 会产生未处理 rejection）。
+   */
+  readLinkedRecordIds?: LinkedRecordIdsReader;
   /** 数据装配（缺省 {@link buildTemplateData}） */
   buildData?: BuildDataFn;
   /** 填充（缺省 {@link fillDocxTemplate}） */
@@ -102,6 +125,8 @@ export interface UseImportedDocDeps {
   extractText?: ExtractDocxTextFn;
   /** 读取器解析（缺省 {@link resolveSdkCellReader}） */
   resolveCellReader?: ResolveCellReaderFn;
+  /** 子记录读取器解析（缺省 {@link resolveSdkLinkedRecordIdsReader}） */
+  resolveLinkedReader?: ResolveLinkedReaderFn;
   /**
    * 模板块存储（缺省取 {@link getTemplateBridgeStore} 注册的 bridge 存储）。
    * 分块模板的字节从专用 key `cbv:tpl:*` 拼装；legacy 内联模板不需要它。
@@ -277,6 +302,40 @@ export async function resolveSdkCellReader(tableId: string | null): Promise<Cell
   return (fieldId: string, recordId: string) => table.getCellString(fieldId, recordId);
 }
 
+/**
+ * 模板是否含**循环段**（docxtemplater 语法 `{#名称}…{/名称}` / 反向段 `{^名称}`）。
+ *
+ * 用途：只有含循环段的模板才需要「子记录 id 读取器」。据此**按需**解析读取器，
+ * 避免为「没有循环段」的模板白白解析一次 SDK 依赖（单测里加载真实 SDK 会产生未处理 rejection）。
+ */
+export function hasLoopSection(templateText: string): boolean {
+  if (typeof templateText !== 'string' || templateText === '') return false;
+  return /\{#|\{\^/.test(templateText);
+}
+
+/**
+ * 由 `tableId` 解析真实**子记录 id 读取器**（生产缺省）。
+ *
+ * ⭐ 需求 2 · 顺带收益：与「关联字段只读表格」**共用同一个只读读取器**
+ * （`sdk/linkedRecords` 的 `LinkedRecordsReader`），只是这里只取 `recordIds`。
+ * 关联 id 列表**可能零请求**（若调用方持有内存记录），此处的生产路径传入 `record = null`
+ * 故走单请求兜底 `table.getCellValue(fieldId, recordId)` —— **只读**。
+ *
+ * ⚠️ 动态 import：避免把 SDK 拖进主入口，也让单测注入 stub 时完全不加载 SDK。
+ */
+export async function resolveSdkLinkedRecordIdsReader(
+  tableId: string | null,
+): Promise<LinkedRecordIdsReader | null> {
+  if (typeof tableId !== 'string' || tableId === '') return null;
+  const { resolveSdkLinkTableSource } = await import('@/sdk/linkedRecords');
+  const source = await resolveSdkLinkTableSource(tableId, null);
+  if (!source) return null;
+  return async (fieldId: string, recordId: string): Promise<string[]> => {
+    const ref = await source.reader(fieldId, recordId);
+    return ref.recordIds;
+  };
+}
+
 /* ===================== ③ 编排 hook ===================== */
 
 /** 内部状态形状（`bytes` 仅 ready 时非空） */
@@ -392,6 +451,22 @@ export function useImportedDoc(args: UseImportedDocArgs): UseImportedDocResult {
         if (!readCellString) throw new Error(NO_READER_MESSAGE);
         if (!active()) return; // ⭐ 过期：丢弃
 
+        // ⭐ 需求 2 · 顺带收益：注入**子记录 id 读取器** → docx 循环段（`{#明细}…{/明细}`）
+        //    不再恒为空。仅在「模板确实含循环段」或「测试已显式注入」时才去解析读取器，
+        //    避免为无循环段的模板白白解析一次 SDK 依赖。解析失败 / 无 tableId → 不注入，
+        //    由 `buildTemplateData` 走既有「显式报告」路径（**不静默**，见 buildData 约束 3 的同类理由）。
+        let readLinkedRecordIds: LinkedRecordIdsReader | undefined = deps.readLinkedRecordIds;
+        if (readLinkedRecordIds === undefined && hasLoopSection(templateText)) {
+          const resolveLinkedReader = deps.resolveLinkedReader ?? resolveSdkLinkedRecordIdsReader;
+          try {
+            readLinkedRecordIds = (await resolveLinkedReader(tableId)) ?? undefined;
+          } catch (err) {
+            (deps.onError ?? logError)('doc.imported', err, { step: 'linkedReader' });
+            readLinkedRecordIds = undefined;
+          }
+        }
+        if (!active()) return; // ⭐ 过期：丢弃
+
         step = 'build';
         const buildData = deps.buildData ?? buildTemplateData;
         const { data } = await buildData({
@@ -399,6 +474,7 @@ export function useImportedDoc(args: UseImportedDocArgs): UseImportedDocResult {
           fields,
           recordId: recordId ?? '',
           readCellString,
+          readLinkedRecordIds,
         });
         if (!active()) return; // ⭐ 过期：丢弃（先发起的后完成 → 绝不覆盖）
 

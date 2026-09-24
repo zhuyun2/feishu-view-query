@@ -13,10 +13,19 @@
  *
  * ⚠️ 这里的值是**测试契约用的假值**，与真机 `blockTypeId` 无关，绝不可用作业务判据。
  *
- * ⚠️ 另：这一行**挡不住** SDK import 期向宿主发消息产生的未处理 rejection
- *  （`Cannot found handler of bitable.*`）。那一类由 `vitest.sdk.config.ts` 在
- *  **隔离环境**里单独处理，主配置不得放宽 —— 见 `src/sdk/sdkPackage.smoke.test.ts` 的说明。
+ * ⚠️ 2026-09-23 更新：**本行已不足以让「真 import SDK 的测试」干净通过**。
+ *  背景：需求 2 的「关联记录读取器」让 `useImportedDoc` 在**主套件**里也会动态 import
+ *  `@/sdk/base`（进而 import 真 SDK）——原先「主套件零运行时加载 SDK」的前提不再成立。
+ *  实测后果：SDK import 期向宿主发消息（`WidgetBase_getBasePermission` /
+ *  `WidgetBase_registerBaseEvent` 等）在 jsdom 里被**自己**收到却无人应答 →
+ *  16 个未处理 rejection → **断言全绿但 vitest 退出码 = 1**。
+ *
+ *  处理方式：把 `window.postMessage` 置空。这**不是**放宽错误阈值，而是**如实建模环境**
+ *  ——jsdom 里根本没有宿主，这些消息本来就永远不可能被应答。与 `setupSdkSmoke.ts`
+ *  （隔离 SDK 配置）用的是同一手段，保持两处一致。
+ *  ⚠️ 仍然**不得**使用 `dangerouslyIgnoreUnhandledErrors`：那才是真的蒙住眼睛。
  */
 window.name = JSON.stringify({ blockTypeId: 'blk_test_only', channel: 'ch_test_only' });
+window.postMessage = () => undefined;
 
 export {};

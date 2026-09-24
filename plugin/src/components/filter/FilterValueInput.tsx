@@ -16,6 +16,9 @@
  *    避免类型切换时出现「UI 显示 A、store 里存 B」的双真相。
  */
 import type { FieldMetaLite } from '@/fields/fieldTypes';
+import { FieldSelect } from '@/components/common/FieldSelect';
+import type { FieldSelectOption } from '@/components/common/FieldSelect';
+import { SearchableMultiSelect } from '@/components/common/SearchableMultiSelect';
 import {
   getValueInputKind,
   operatorRequiresValue,
@@ -77,6 +80,9 @@ export function defaultValueForKind(kind: FilterValueInputKind): unknown {
     case 'text':
     case 'select':
       return '';
+    case 'multiSelect':
+      // 多选值形态 = 选项名数组；空数组在引擎侧判「未填写」→ 条件未生效、不隐藏数据
+      return [];
     case 'boolean':
       return true;
     case 'none':
@@ -121,42 +127,69 @@ export function FilterValueInput({
 
   if (kind === 'boolean') {
     const raw = value === true ? 'true' : value === false ? 'false' : '';
+    // ⭐ req1：布尔值控件换成共享的可搜下拉（`FieldSelect`）；`''|'true'|'false'` 映射与原生 select 等价。
+    const options: FieldSelectOption[] = [
+      { value: '', label: '请选择' },
+      { value: 'true', label: '是' },
+      { value: 'false', label: '否' },
+    ];
     return (
-      <select
-        className="cbv-select"
-        data-testid={testId}
-        aria-label="筛选值"
+      <FieldSelect
+        options={options}
         value={raw}
-        onChange={(event) => {
-          const next = event.target.value;
+        onChange={(next) => {
           onChange(next === '' ? undefined : next === 'true');
         }}
-      >
-        <option value="">请选择</option>
-        <option value="true">是</option>
-        <option value="false">否</option>
-      </select>
+        testId={testId}
+        ariaLabel="筛选值"
+      />
     );
   }
 
   if (kind === 'select') {
     const names = readOptionNames(meta);
     const current = typeof value === 'string' ? value : '';
+    // ⭐ req1：单选值控件由原生 `<select>` 换成可搜下拉（选项多时中文可关键字定位）；写回仍是选项 name。
+    const options: FieldSelectOption[] = [
+      { value: '', label: '请选择' },
+      ...names.map((name) => ({ value: name, label: name })),
+    ];
     return (
-      <select
-        className="cbv-select"
-        data-testid={testId}
-        aria-label="筛选值"
-        value={names.includes(current) ? current : ''}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">请选择</option>
-        {names.map((name) => (
-          <option key={name} value={name}>
-            {name}
-          </option>
-        ))}
-      </select>
+      <FieldSelect
+        options={options}
+        value={current}
+        onChange={(next) => onChange(next)}
+        searchable
+        searchableHint
+        testId={testId}
+        ariaLabel="筛选值"
+        placeholder="请选择"
+        emptyText="无匹配选项"
+      />
+    );
+  }
+
+  if (kind === 'multiSelect') {
+    const names = readOptionNames(meta);
+    // 兼容：历史 / 外部配置可能把多选值写成单个 string（旧 UI 只产出单值），此处归一化为数组
+    const selected = Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === 'string')
+      : typeof value === 'string' && value !== ''
+        ? [value]
+        : [];
+    const options: FieldSelectOption[] = names.map((name) => ({ value: name, label: name }));
+    return (
+      <SearchableMultiSelect
+        options={options}
+        value={selected}
+        onChange={(next) => onChange(next)}
+        searchable
+        searchableHint
+        testId={testId}
+        ariaLabel="筛选值"
+        placeholder="请选择"
+        emptyText="无匹配选项"
+      />
     );
   }
 

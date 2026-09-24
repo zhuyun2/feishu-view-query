@@ -16,7 +16,8 @@
  *   `hasMore` 为真时常驻「未加载全部」+「加载全部并重新筛选」升级入口；
  *   只有真正翻完所有页（`!hasMore`）才允许出现「全部」字样。
  */
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { AUTO_LOAD_ALL_SILENT_THRESHOLD } from '@/constants';
 import type { HighlightRule } from '@/config/types';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { VirtualCardGrid } from '@/components/grid/VirtualCardGrid';
@@ -53,6 +54,7 @@ const EMPTY_RULES: HighlightRule[] = [];
 export function ViewShell({ tokens }: ViewShellProps): JSX.Element {
   const records = useViewStore((state) => state.records);
   const total = useViewStore((state) => state.total);
+  const totalKnown = useViewStore((state) => state.totalKnown);
   const hasMore = useViewStore((state) => state.hasMore);
   const fields = useViewStore((state) => state.fields);
   const fieldsById = useViewStore((state) => state.fieldsById);
@@ -68,6 +70,7 @@ export function ViewShell({ tokens }: ViewShellProps): JSX.Element {
   const filter = useUiStore((state) => state.filter);
   const filterLoadingAll = useUiStore((state) => state.filterLoadingAll);
   const filterLoadAllStartedFrom = useUiStore((state) => state.filterLoadAllStartedFrom);
+  const filterLoadAllSilent = useUiStore((state) => state.filterLoadAllSilent);
 
   const hoverIntent = useHoverIntent();
 
@@ -96,6 +99,7 @@ export function ViewShell({ tokens }: ViewShellProps): JSX.Element {
     () =>
       selectFilterScopeLabel({
         total,
+        totalKnown,
         loaded: records.length,
         matched: visible.visible,
         hasFilter: visible.hasFilter,
@@ -103,7 +107,7 @@ export function ViewShell({ tokens }: ViewShellProps): JSX.Element {
         hasMore,
         invalidCount: invalidConditionCount,
       }),
-    [total, records.length, visible.visible, visible.hasFilter, visible.hasSearch, hasMore, invalidConditionCount],
+    [total, totalKnown, records.length, visible.visible, visible.hasFilter, visible.hasSearch, hasMore, invalidConditionCount],
   );
 
   // 覆盖率状态行（§22.11.3）：常驻覆盖范围 + 未加载全部时的诚实提示与升级入口
@@ -111,6 +115,7 @@ export function ViewShell({ tokens }: ViewShellProps): JSX.Element {
     () =>
       selectFilterScopeStatus({
         total,
+        totalKnown,
         loaded: records.length,
         filterMatched: visible.filterMatched,
         visible: visible.visible,
@@ -118,11 +123,13 @@ export function ViewShell({ tokens }: ViewShellProps): JSX.Element {
         hasSearch: visible.hasSearch,
         hasMore,
         loadingAll: filterLoadingAll,
+        loadingAllSilent: filterLoadAllSilent,
         startedFrom: filterLoadAllStartedFrom,
         invalidCount: invalidConditionCount,
       }),
     [
       total,
+      totalKnown,
       records.length,
       visible.filterMatched,
       visible.visible,
@@ -130,6 +137,7 @@ export function ViewShell({ tokens }: ViewShellProps): JSX.Element {
       visible.hasSearch,
       hasMore,
       filterLoadingAll,
+      filterLoadAllSilent,
       filterLoadAllStartedFrom,
       invalidConditionCount,
     ],
@@ -185,26 +193,88 @@ export function ViewShell({ tokens }: ViewShellProps): JSX.Element {
   }, []);
 
   /**
-   * 「加载全部并重新筛选」（§22.11.3 Plan C-lite 升级）。
+   * 「加载全部并重新筛选」（§22.11.3 Plan C-lite 升级 + 自动全量）。
    *
-   * 复用既有 `ViewStore.loadMore()`（内含并发抑制 / 游标 / 去重 / 失败兜底），
+   * 复用既有 `ViewStore.loadMore()`（内含并发抑制 / 游标 / 去重 / 失败标记），
    * 循环翻到 `hasMore === false` 为止，期间由 UiStore 记录「正在升级」以显示进度。
-   * ⚠️ 无论成功或异常都必须 `endFilterLoadAll()`，否则 UI 会永久停留在进度态。
+   *
+   * 三道安全闸（与 `ViewStore` 的加载代号协同）：
+   * 1. **取消**：每轮开始校验 `filterLoadingAll`——取消按钮 / 清空条件会把它置 false，循环随即退出；
+   * 2. **作废**：每轮校验 `loadGeneration`——`refresh()` 或条件重置会自增代号，使在途升级立即失效
+   *    （杜绝「刷新与在途升级互相污染」）；
+   * 3. **失败中止**：`loadMore` 失败会置 `loadMoreFailed`，本循环**立即中止 + 提示**，
+   *    绝不让部分结果伪装成「已加载全部」。
+   *
+   * ⚠️ 无论成功 / 取消 / 异常都必须 `endFilterLoadAll()`，否则 UI 会永久停留在进度态。
+   *
+   * @param silent 静默模式（数据量 ≤ 阈值）：不显示进度 / 取消按钮，但加载行为完全一致。
    */
-  const handleLoadAll = useCallback(async (): Promise<void> => {
+  const handleLoadAll = useCallback(async (silent: boolean): Promise<void> => {
     if (useUiStore.getState().filterLoadingAll) return;
-    const startedFrom = useViewStore.getState().records.length;
-    useUiStore.getState().beginFilterLoadAll(startedFrom);
+    const startState = useViewStore.getState();
+    // ⚠️ 这里**不**校验 `dataSource`：手动按钮是既有基线路径（其可达性已由 `hasMore` 保证，
+    //    且 `loadMore` 自身对缺失数据源是安全 no-op）；数据源就绪与否只约束**自动触发**（见下方 effect）。
+    if (!startState.hasMore) return;
+    const startedFrom = startState.records.length;
+    useUiStore.getState().beginFilterLoadAll(startedFrom, silent);
+    const generation = startState.loadGeneration;
+    let failed = false;
     try {
       for (let page = 0; page < MAX_LOAD_ALL_PAGES; page += 1) {
-        if (!useViewStore.getState().hasMore) break;
+        if (!useUiStore.getState().filterLoadingAll) break; // 取消 / 条件清空
+        if (useViewStore.getState().loadGeneration !== generation) break; // 刷新 / 条件重置作废
+        if (!useViewStore.getState().hasMore) break; // 已到底
         await useViewStore.getState().loadMore();
-        if (!useViewStore.getState().hasMore) break;
+        const after = useViewStore.getState();
+        if (after.loadGeneration !== generation) break;
+        if (after.loadMoreFailed) {
+          failed = true;
+          break;
+        }
+        if (!after.hasMore) break;
       }
     } finally {
       useUiStore.getState().endFilterLoadAll();
+      if (failed) useUiStore.getState().showToast('加载全部数据失败，请稍后重试');
     }
   }, []);
+
+  /** 取消「加载全部」：停止循环 + 作废在途批次（已加载的记录保留） */
+  const handleCancelLoadAll = useCallback((): void => {
+    useUiStore.getState().endFilterLoadAll();
+    useViewStore.getState().bumpLoadGeneration();
+  }, []);
+
+  /**
+   * 自动全量加载：**筛选或搜索「变为生效」时**触发（用户已拍板）。
+   *
+   * - 未生效不做任何事；**清空**筛选 / 搜索（生效 → 失效）时反而**作废在途批次**并停止升级
+   *   （条件已重置，继续拉全量没有意义）；
+   * - 仅在真实数据源就绪时触发（`dataSource` 为空=未初始化/测试环境，不触发）；
+   * - 阈值：`totalKnown && total ≤ 阈值` → 静默全量（不打扰）；否则显示进度 + 取消按钮。
+   *
+   * 触发点刻意放在 **`ViewShell`**：`handleLoadAll` 与状态行都在这层，避免把加载编排下沉到 store。
+   */
+  const wasActiveRef = useRef(false);
+  useEffect(() => {
+    const active = visible.hasFilter || visible.hasSearch;
+    const wasActive = wasActiveRef.current;
+    wasActiveRef.current = active;
+    if (active && !wasActive) {
+      const view = useViewStore.getState();
+      if (!view.dataSource || !view.hasMore) return;
+      const silent = view.totalKnown && view.total <= AUTO_LOAD_ALL_SILENT_THRESHOLD;
+      void handleLoadAll(silent);
+    } else if (!active && wasActive) {
+      // 条件重置（清空筛选 / 搜索）：作废在途批次并停止升级，避免无谓拉取
+      useViewStore.getState().bumpLoadGeneration();
+      useUiStore.getState().endFilterLoadAll();
+    }
+  }, [visible.hasFilter, visible.hasSearch, handleLoadAll]);
+
+  const handleLoadAllClick = useCallback((): void => {
+    void handleLoadAll(false);
+  }, [handleLoadAll]);
 
   return (
     <div className="cbv-app">
@@ -231,9 +301,19 @@ export function ViewShell({ tokens }: ViewShellProps): JSX.Element {
               type="button"
               className="cbv-btn cbv-link-btn"
               data-testid="filter-load-all"
-              onClick={() => void handleLoadAll()}
+              onClick={handleLoadAllClick}
             >
               {scopeStatus.upgradeLabel}
+            </button>
+          ) : null}
+          {filterLoadingAll && !filterLoadAllSilent ? (
+            <button
+              type="button"
+              className="cbv-btn cbv-link-btn"
+              data-testid="filter-load-all-cancel"
+              onClick={handleCancelLoadAll}
+            >
+              取消加载
             </button>
           ) : null}
           {scopeStatus.progressText ? (

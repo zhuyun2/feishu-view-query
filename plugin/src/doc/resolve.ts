@@ -56,6 +56,7 @@ import { FieldType } from '@/fields/fieldTypes';
 import type { SdkRecord } from '@/sdk/port';
 import { normalize } from '@/fields/normalize';
 import { getRecordFields, getRecordId } from '@/data/RecordDataSource';
+import type { LinkTable } from './linkTable';
 import { isBlockVisible } from '@/highlight/ruleEngine';
 import type { FieldMetaMap } from '@/highlight/ruleEngine';
 import { checksumOf } from '@/utils/hash';
@@ -99,6 +100,14 @@ export interface ResolveBlocksArgs {
   isVisible?: BlockVisibilityPredicate;
   /** 区块 id 生成器；缺省 = 确定性工厂 `createBlockIdFactory(0)` */
   makeId?: BlockIdFactory;
+  /**
+   * ⭐ 需求 2：关联字段 → 预取好的**只读表格**数据（`fieldId → LinkTable`）。
+   *
+   * ⚠️ **纯输入**：本函数（`resolveBlocks`）是**同步纯函数**，**绝不**在此发起异步 IO；
+   * 关联数据必须由调用方（`hooks/usePagedDocument`）**预取**后按此参数注入。
+   * 缺省 / 无该字段 → 保持既有行为（关联表格回退到「行记录自身携带的 fields」，见 `resolveTable`）。
+   */
+  linkedRecords?: ReadonlyMap<string, LinkTable>;
 }
 
 /* ===================== 解析产物类型 ===================== */
@@ -146,6 +155,13 @@ export interface ResolvedTableColumn {
   title: string;
   widthPx?: number;
   align?: 'left' | 'center' | 'right';
+  /**
+   * 该列的字段元数据（仅当列**不属于本表**时才需要 —— 目前唯一来源是需求 2 的
+   * `rowSource = linkedRecords` **注入**：列来自目标表，`fieldsById`（当前表字段）里没有它们，
+   * 渲染层据此给单元格 `DocFieldValue` 提供正确的 `meta`；否则单元格只能回退占位「—」）。
+   * 本表列的元数据仍由 `fieldsById` 提供，此处保持 `undefined`。
+   */
+  meta?: FieldMetaLite;
 }
 
 /** 表格行 */
@@ -224,6 +240,12 @@ export interface ResolvedTablePayload {
   rows: ResolvedTableRow[];
   showHeader: boolean;
   zebra: boolean;
+  /**
+   * ⭐ 需求 2：因**行上限**被隐藏的行数（> 0 才有）。
+   * 关联记录表格（`rowSource = linkedRecords`）溢出时由渲染层以「+N」告知，
+   * **绝不**静默丢弃（否则用户不会怀疑「少了几行」）。
+   */
+  truncated?: number;
 }
 
 export interface ResolvedRichTextPayload {
@@ -291,8 +313,16 @@ export interface ResolvedBlock {
   imageUrls: string[];
   /** 表格块解析出的行（§21.3.3 `rows`；仅 table 块非空） */
   rows: ResolvedTableRow[];
-  /** 渲染/测量所需的 payload hash（高度缓存键用，内容变则变） */
+  /** 渲染/测量 payload hash（高度缓存键用，内容变则变） */
   payloadHash: string;
+  /**
+   * ⭐ 需求 2：本区块引用的**关联字段** → 预取到的只读表格数据（仅当该字段确实取到数据时存在）。
+   *
+   * 供 `components/doc/blocks` 在字段级渲染 `Link(18)` / `DuplexLink(21)` 时画**只读表格**
+   * （无数据 → 该键不存在 → 渲染层回退到原有文本呈现，**优雅降级**）。
+   * 缺省 / 空对象 = 无可用关联表格（编辑器无 SDK、预取失败、字段为空等）。
+   */
+  linkTables?: Record<string, LinkTable>;
 }
 
 /* ===================== 判空（主理人裁定） ===================== */
@@ -403,6 +433,8 @@ interface ResolveContext {
   isVisible: BlockVisibilityPredicate;
   ids: BlockIdFactoryHandle;
   used: Set<string>;
+  /** 关联字段 → 预取的只读表格数据（缺省空 Map；见 `ResolveBlocksArgs.linkedRecords`） */
+  linkedRecords: ReadonlyMap<string, LinkTable>;
 }
 
 /** 默认条件显隐求值器：复用高亮规则引擎（null / 未配置 → 可见） */
@@ -628,45 +660,79 @@ function linkedRowFields(entry: unknown): Record<string, unknown> | null {
   return null;
 }
 
-/** 7. 表格：列解析 + 行来源解析（currentRecord / linkedRecords） */
+/**
+ * 7. 表格：列解析 + 行来源解析（currentRecord / linkedRecords）。
+ *
+ * ⭐ 需求 2：`linkedRecords` 行来源优先消费**预取注入**的只读表格
+ * （`ctx.linkedRecords.get(linkFieldId)`）：
+ *  · 列 = 目标表「主字段 + 前几个可用字段」（**不是** `block.columns` —— 那些字段 id 属于
+ *    本表，对被关联记录无意义）；
+ *  · 行 = 被关联记录（每行 `{recordId,title,cells}`，行内值已归一化）；
+ *  · `truncated` = 因行上限被隐藏的行数（渲染层以「+N」告知）。
+ * 无注入（编辑器无 SDK / 预取失败 / 旧调用方）→ **保持既有回退行为**（行记录自身携带的
+ * `fields`；都取不到则 1 行空单元格），保证向后兼容与优雅降级。
+ */
 function resolveTable(block: TableBlock, ctx: ResolveContext): ResolvedTablePayload | null {
+  const injectedLink: LinkTable | undefined =
+    block.rowSource.type === 'linkedRecords' ? ctx.linkedRecords.get(block.rowSource.fieldId) : undefined;
+
+  // 列：注入的关联表格用目标表列；其余情况仍由 `block.columns` + 本表字段元数据解析
   const columns: ResolvedTableColumn[] = [];
-  for (const column of block.columns ?? []) {
-    const meta = ctx.metas[column.fieldId];
-    if (!meta) continue; // 失效字段引用 → 剔除该列
-    const resolved: ResolvedTableColumn = { fieldId: column.fieldId, title: column.titleOverride ?? meta.name };
-    if (typeof column.widthPx === 'number') resolved.widthPx = column.widthPx;
-    if (column.align !== undefined) resolved.align = column.align;
-    columns.push(resolved);
+  if (injectedLink) {
+    for (const column of injectedLink.columns) {
+      const resolved: ResolvedTableColumn = { fieldId: column.fieldId, title: column.label };
+      // 列来自**目标表**：把目标表字段元数据一并带上，供渲染层把单元格交给正确的渲染器
+      // （缺了它 `fieldsById` 查不到 → 单元格只能显示缺 meta 占位「—」）。
+      if (column.meta) resolved.meta = column.meta;
+      columns.push(resolved);
+    }
+  } else {
+    for (const column of block.columns ?? []) {
+      const meta = ctx.metas[column.fieldId];
+      if (!meta) continue; // 失效字段引用 → 剔除该列
+      const resolved: ResolvedTableColumn = { fieldId: column.fieldId, title: column.titleOverride ?? meta.name };
+      if (typeof column.widthPx === 'number') resolved.widthPx = column.widthPx;
+      if (column.align !== undefined) resolved.align = column.align;
+      columns.push(resolved);
+    }
   }
   // 无有效列 → 无表格可渲染 → 整块隐藏
   if (columns.length === 0) return null;
 
   const rows: ResolvedTableRow[] = [];
+  let truncated: number | undefined;
 
   if (block.rowSource.type === 'linkedRecords') {
     const linkFieldId = block.rowSource.fieldId;
-    const raw = ctx.recordFields[linkFieldId];
-    for (const entry of linkedRowEntries(raw)) {
-      const rowFields = linkedRowFields(entry);
-      const title = linkedRowTitle(entry);
-      const cells: Record<string, NormalizedValue> = {};
-      for (const column of columns) {
-        const meta = ctx.metas[column.fieldId];
-        // 关联记录通常只带「被关联表的标题文本」，本表字段未必可读：
-        // ① 行自带 fields → 直接取；② 列即关联字段本身 → 用行首文本；③ 否则为空（不臆造）
-        const source = rowFields
-          ? rowFields[column.fieldId]
-          : column.fieldId === linkFieldId
-            ? title
-            : undefined;
-        try {
-          cells[column.fieldId] = normalize(source, meta);
-        } catch {
-          cells[column.fieldId] = emptyNormalized();
-        }
+    if (injectedLink) {
+      // ⭐ 预取到的只读关联表格：行内值已由 `doc/linkTable.buildLinkTable` 归一化
+      for (const row of injectedLink.rows) {
+        rows.push({ recordId: row.recordId, title: row.title, cells: row.cells });
       }
-      rows.push({ recordId: linkedRowId(entry), title, cells });
+      truncated = injectedLink.truncated;
+    } else {
+      const raw = ctx.recordFields[linkFieldId];
+      for (const entry of linkedRowEntries(raw)) {
+        const rowFields = linkedRowFields(entry);
+        const title = linkedRowTitle(entry);
+        const cells: Record<string, NormalizedValue> = {};
+        for (const column of columns) {
+          const meta = ctx.metas[column.fieldId];
+          // 关联记录通常只带「被关联表的标题文本」，本表字段未必可读：
+          // ① 行自带 fields → 直接取；② 列即关联字段本身 → 用行首文本；③ 否则为空（不臆造）
+          const source = rowFields
+            ? rowFields[column.fieldId]
+            : column.fieldId === linkFieldId
+              ? title
+              : undefined;
+          try {
+            cells[column.fieldId] = normalize(source, meta);
+          } catch {
+            cells[column.fieldId] = emptyNormalized();
+          }
+        }
+        rows.push({ recordId: linkedRowId(entry), title, cells });
+      }
     }
   } else {
     const cells: Record<string, NormalizedValue> = {};
@@ -690,13 +756,15 @@ function resolveTable(block: TableBlock, ctx: ResolveContext): ResolvedTablePayl
   const capped =
     typeof block.maxRows === 'number' && block.maxRows > 0 ? rows.slice(0, block.maxRows) : rows;
 
-  return {
+  const payload: ResolvedTablePayload = {
     kind: 'table',
     columns,
     rows: capped,
     showHeader: block.showHeader === true,
     zebra: block.zebra === true,
   };
+  if (typeof truncated === 'number' && truncated > 0) payload.truncated = truncated;
+  return payload;
 }
 
 /** 8. 静态富文本：markdown 子集 → 安全节点 */
@@ -816,6 +884,24 @@ function referencedFieldIds(block: DocBlock, metas: FieldMetaMap): string[] {
   return ids;
 }
 
+/**
+ * ⭐ 需求 2：收集本区块引用的、**且已预取到**的关联字段只读表格（`fieldId → LinkTable`）。
+ *
+ * - 只收「本区块确实引用的字段」（`referencedFieldIds`）中有预取数据的那些；
+ * - 无可用数据（未预取 / 空表）→ 返回 `null`（不输出键 ⇒ 渲染层回退原有文本呈现）。
+ */
+function collectBlockLinkTables(block: DocBlock, ctx: ResolveContext): Record<string, LinkTable> | null {
+  if (ctx.linkedRecords.size === 0) return null;
+  let out: Record<string, LinkTable> | null = null;
+  for (const fieldId of referencedFieldIds(block, ctx.metas)) {
+    const table = ctx.linkedRecords.get(fieldId);
+    if (!table || table.columns.length === 0) continue;
+    if (!out) out = {};
+    out[fieldId] = table;
+  }
+  return out;
+}
+
 /** 单块解析：返回 null = 该块不产出（条件未命中 / hideWhenEmpty / 失效引用 / 无有效列） */
 function resolveBlock(block: DocBlock, ctx: ResolveContext): ResolvedBlock | null {
   if (!block || typeof block !== 'object') return null;
@@ -896,9 +982,17 @@ function resolveBlock(block: DocBlock, ctx: ResolveContext): ResolvedBlock | nul
   const imageUrls = payload.kind === 'image' ? payload.images.map((image) => image.url) : [];
   const rows = payload.kind === 'table' ? payload.rows : [];
 
+  // ⑤ ⭐ 需求 2：关联字段 → 预取到的只读表格（无数据 → 不输出该键，渲染层回退文本呈现）
+  const linkTables = collectBlockLinkTables(block, ctx);
+
   const blockId = ensureUniqueBlockId(block.blockId, block.kind, ctx.ids, ctx.used);
 
-  return {
+  // locale 参与哈希：将来本地化格式化变化时高度缓存能正确失效。
+  // 有关联表格时把 `linkTables` 一并纳入指纹（内容变则哈希变）；无则保持与历史完全一致的形态。
+  const hashInput: Record<string, unknown> = { locale: ctx.locale, payload };
+  if (linkTables) hashInput.linkTables = linkTables;
+
+  const resolved: ResolvedBlock = {
     blockId,
     block,
     kind: block.kind,
@@ -908,12 +1002,16 @@ function resolveBlock(block: DocBlock, ctx: ResolveContext): ResolvedBlock | nul
     payload,
     imageUrls,
     rows,
-    // locale 参与哈希：将来本地化格式化变化时高度缓存能正确失效
-    payloadHash: checksumOf({ locale: ctx.locale, payload }),
+    payloadHash: checksumOf(hashInput),
   };
+  if (linkTables) resolved.linkTables = linkTables;
+  return resolved;
 }
 
 /* ===================== 主入口 ===================== */
+
+/** 共享的空关联表格表（避免每次调用新建 Map，保持「缺省 = 无关联数据」的稳定语义） */
+const EMPTY_LINK_TABLES: ReadonlyMap<string, LinkTable> = new Map<string, LinkTable>();
 
 /**
  * ⭐ 区块模板序列 + 记录 + 字段元信息 + 规则引擎 → `ResolvedBlock[]`。
@@ -922,12 +1020,13 @@ function resolveBlock(block: DocBlock, ctx: ResolveContext): ResolvedBlock | nul
  * 已在此阶段完成的过滤：条件显隐（`visibleWhen`）、`hideWhenEmpty`、
  * `hideEmptyRows` / `hideEmptyItems`、失效字段引用、无有效列的表格。
  *
- * @param args.blocks    区块模板序列（`DocTemplate.blocks`）
- * @param args.record    当前记录（null/undefined → 字段全按空处理）
- * @param args.fields    当前视图字段元数据
- * @param args.locale    语言环境（缺省 'zh-CN'；参与 payloadHash）
- * @param args.isVisible 条件显隐求值器（缺省 = `ruleEngine.isBlockVisible`）
- * @param args.makeId    区块 id 生成器（缺省 = 确定性 `createBlockIdFactory(0)`）
+ * @param args.blocks        区块模板序列（`DocTemplate.blocks`）
+ * @param args.record        当前记录（null/undefined → 字段全按空处理）
+ * @param args.fields        当前视图字段元数据
+ * @param args.locale        语言环境（缺省 'zh-CN'；参与 payloadHash）
+ * @param args.isVisible     条件显隐求值器（缺省 = `ruleEngine.isBlockVisible`）
+ * @param args.makeId        区块 id 生成器（缺省 = 确定性 `createBlockIdFactory(0)`）
+ * @param args.linkedRecords 关联字段 → 预取好的只读表格（**纯输入**；异步 IO 在调用方）
  */
 export function resolveBlocks(args: ResolveBlocksArgs): ResolvedBlock[] {
   const blocks = Array.isArray(args.blocks) ? args.blocks : [];
@@ -944,6 +1043,7 @@ export function resolveBlocks(args: ResolveBlocksArgs): ResolvedBlock[] {
     isVisible: args.isVisible ?? defaultIsVisible,
     ids: args.makeId ? { next: args.makeId } : createBlockIdFactory(0),
     used: new Set<string>(),
+    linkedRecords: args.linkedRecords ?? EMPTY_LINK_TABLES,
   };
 
   const out: ResolvedBlock[] = [];

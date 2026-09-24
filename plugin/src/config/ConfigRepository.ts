@@ -7,6 +7,7 @@
 import { CONFIG_SIZE_LIMIT_BYTES, CONFIG_SIZE_WARN_BYTES } from '@/constants';
 import { formatError } from '@/utils/errorText';
 import { checksumOf, stableStringify, utf8ByteLength } from '@/utils/hash';
+import { logWarn } from '@/utils/log';
 import { CONFIG_PLUGIN_VERSION } from './defaults';
 import { migrate } from './migrations';
 import { CURRENT_SCHEMA_VERSION, type CardViewConfig, type ConfigEnvelope } from './types';
@@ -128,6 +129,23 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** 诊断日志里 `rawHead` 的截断长度（够看清「截断的 JSON / 非对象 / 缺字段」，又不刷屏） */
+const RAW_HEAD_MAX_CHARS = 120;
+
+/**
+ * 把介质读到的原始值归一为**可诊断字符串**（供损坏日志展示）。
+ * - 字符串：原样返回（最常见，bridge/localStorage 存的就是 JSON 串）；
+ * - 对象 / 数组：安全 `JSON.stringify`（循环引用等退化为 `String()`），绝不因诊断而抛错。
+ */
+function toRawString(raw: unknown): string {
+  if (typeof raw === 'string') return raw;
+  try {
+    return JSON.stringify(raw) ?? String(raw);
+  } catch {
+    return String(raw);
+  }
+}
+
 /**
  * 解析并校验 envelope。
  * - 非 JSON / 结构缺失 → valid=false（触发回退默认 + 备份）
@@ -220,6 +238,22 @@ export function resolveLoadedConfig(raw: unknown, options: LoadOptions): LoadRes
   const { envelope, valid, reason } = deserializeEnvelope(raw);
   if (!valid || !envelope) {
     options.backup?.(typeof raw === 'string' ? raw : JSON.stringify(raw));
+    const reasonText = reason ?? 'unknown';
+    // ⭐ 真机取证（只读排查结论）：损坏分支原本**无任何日志**，导致「每次打开都回退默认排版」
+    //    无法定案、用户无从配合。这里补一条 warn —— 仅凭这一行即可区分五种 reason：
+    //    invalid-json / not-object / missing-fields / checksum-mismatch。
+    //    ⚠️ 只在**真正判损坏**时打：正常读取与「介质读取失败」路径都不打（避免噪音与误报）。
+    const rawText = toRawString(raw);
+    logWarn('config.load', `配置损坏：${reasonText}`, {
+      phase: 'corrupted',
+      viewId: options.viewId,
+      source: options.source,
+      reason: reasonText,
+      rawLen: rawText.length,
+      rawHead: rawText.slice(0, RAW_HEAD_MAX_CHARS),
+      // envelope 非空（checksum-mismatch）时给出真实版本号；其余 reason 下无信封 → undefined
+      schemaVersion: envelope ? envelope.schemaVersion : undefined,
+    });
     return {
       config: null,
       degraded: true,
@@ -227,7 +261,7 @@ export function resolveLoadedConfig(raw: unknown, options: LoadOptions): LoadRes
       corrupted: true,
       unsupportedNewer: false,
       source: options.source,
-      error: reason ?? 'unknown',
+      error: reasonText,
     };
   }
 
@@ -244,6 +278,19 @@ export function resolveLoadedConfig(raw: unknown, options: LoadOptions): LoadRes
     };
   } catch (err) {
     options.backup?.(typeof raw === 'string' ? raw : JSON.stringify(raw));
+    // 迁移抛错可能是 SDK 的普通对象（{ code, msg }），必须经 formatError 保留错误码。
+    // ⚠️ 文案形态（`migration-failed: ` 前缀）保持不变 —— 下游可能按 token 匹配。
+    const reasonText = `migration-failed: ${formatError(err)}`;
+    const rawText = toRawString(raw);
+    logWarn('config.load', `配置损坏：${reasonText}`, {
+      phase: 'corrupted',
+      viewId: options.viewId,
+      source: options.source,
+      reason: reasonText,
+      rawLen: rawText.length,
+      rawHead: rawText.slice(0, RAW_HEAD_MAX_CHARS),
+      schemaVersion: envelope.schemaVersion,
+    });
     return {
       config: null,
       degraded: true,
@@ -251,8 +298,7 @@ export function resolveLoadedConfig(raw: unknown, options: LoadOptions): LoadRes
       corrupted: true,
       unsupportedNewer,
       source: options.source,
-      // 迁移抛错可能是 SDK 的普通对象（{ code, msg }），必须经 formatError 保留错误码
-      error: `migration-failed: ${formatError(err)}`,
+      error: reasonText,
     };
   }
 }
