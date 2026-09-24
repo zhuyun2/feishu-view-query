@@ -15,6 +15,7 @@
 import { memo, useState } from 'react';
 import type { DocBlock, DocTheme, DocTemplate, PageSetup } from '@/config/types';
 import type { FieldMetaLite } from '@/fields/fieldTypes';
+import type { LinkTargetFieldsState } from '@/hooks/useLinkTargetFields';
 import { findBlock } from './blockMath';
 import { BlockPropertyForm } from './BlockPropertyForm';
 import { PageSetupPanel } from './PageSetupPanel';
@@ -56,6 +57,10 @@ export interface DocPropertyPanelProps {
   onBlockDelete?: (blockId: string) => void;
   onPageSetupChange: (next: PageSetup) => void;
   onThemeChange: (next: DocTheme) => void;
+  /** ⭐ 需求 2 · 第二阶段：关联字段 → 目标表字段状态（关联记录显示列配置用） */
+  linkTargetFields?: Readonly<Record<string, LinkTargetFieldsState>>;
+  /** ⭐ 需求 2 · 第二阶段：按需解析关联字段的目标表字段 */
+  onEnsureLinkFields?: (fieldId: string) => void;
 }
 
 function Section({
@@ -104,6 +109,8 @@ function DocPropertyPanelInner({
   onBlockDelete,
   onPageSetupChange,
   onThemeChange,
+  linkTargetFields,
+  onEnsureLinkFields,
 }: DocPropertyPanelProps): JSX.Element {
   const [open, setOpen] = useState<Record<DocPropertySectionKey, boolean>>({ ...DOC_PROPERTY_DEFAULT_OPEN });
 
@@ -120,6 +127,8 @@ function DocPropertyPanelInner({
       fields={fields}
       onChange={(patch: Record<string, unknown>) => onBlockChange(selectedBlock.blockId, patch)}
       onDelete={onBlockDelete ? () => onBlockDelete(selectedBlock.blockId) : undefined}
+      linkTargetFields={linkTargetFields}
+      onEnsureLinkFields={onEnsureLinkFields}
     />
   ) : (
     <div className="cbv-docprops__empty" data-docprops-empty="true">

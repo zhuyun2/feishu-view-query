@@ -43,6 +43,12 @@ export type { LinkRowRecord, LinkedRecordRef, LinkedRecordsReader };
 /** 关联表格默认展示的最大行数（溢出 → `truncated` → 渲染「+N」） */
 export const DEFAULT_LINK_TABLE_ROWS = 20;
 
+/** ⭐ 需求 2 · 第二阶段：关联记录行数上限的**合法下界**（`linkRowLimit`） */
+export const MIN_LINK_TABLE_ROWS = 1;
+
+/** ⭐ 需求 2 · 第二阶段：关联记录行数上限的**合法上界**（`linkRowLimit`） */
+export const MAX_LINK_TABLE_ROWS = 50;
+
 /** 目标表默认额外展示的列数（**不含**主字段）= 前 3 个可用字段 */
 export const DEFAULT_LINK_TABLE_EXTRA_COLUMNS = 3;
 
@@ -88,6 +94,38 @@ export interface LinkTable {
   rows: LinkRow[];
   /** 因行上限被隐藏的行数（> 0 才有；渲染层据此显示「+N」） */
   truncated?: number;
+  /**
+   * ⭐ 需求 2 · 第二阶段：用户**显式配置**的列中，**目标表里不存在**而被跳过的字段 id（保序）。
+   * 调用方（预取层）据此发**一条**告警 —— 绝不静默丢列。
+   */
+  droppedColumns?: string[];
+  /**
+   * ⭐ 需求 2 · 第二阶段：**配置的列全部失效**（目标表里一个都找不到）→ 已回退默认列规则。
+   * 供预取层/UI **诚实告知**「已回退默认列」（绝不静默改变用户预期的列）。
+   */
+  columnsFallback?: true;
+}
+
+/** ⭐ 需求 2 · 第二阶段：单个关联字段的「显示列 / 行数上限」配置（预取的纯输入） */
+export interface LinkFieldColumnConfig {
+  /** 目标表字段 id 列表（顺序即列顺序） */
+  columns?: string[];
+  /** 展示的最大行数（可能越界 —— 由预取层收敛并告警） */
+  rowLimit?: number;
+}
+
+/**
+ * ⭐ 需求 2 · 第二阶段：读取关联字段的**目标表 id**（`property.tableId`，兼容 `table_id`）。
+ * 取不到 / 非对象 → `''`（调用方据此判定「无法解析关联表」→ 优雅降级）。
+ */
+export function readLinkTargetTableId(meta: FieldMetaLite | null | undefined): string {
+  const prop = meta?.property;
+  if (typeof prop !== 'object' || prop === null) return '';
+  const record = prop as Record<string, unknown>;
+  for (const key of ['tableId', 'table_id']) {
+    if (typeof record[key] === 'string' && record[key] !== '') return record[key] as string;
+  }
+  return '';
 }
 
 /* ===================== 小工具 ===================== */
@@ -115,6 +153,26 @@ function resolveConcurrency(value: number | undefined): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return LINK_TABLE_CONCURRENCY;
   const floored = Math.floor(value);
   return floored >= 1 ? floored : LINK_TABLE_CONCURRENCY;
+}
+
+/**
+ * 归一化**字段级**行上限（需求 2 · 第二阶段）：
+ * - 合法（`[MIN, MAX]` 内整数）→ 用之；
+ * - **提供了但越界 / 非法** → 回退默认 20，并置 `invalid=true`（调用方发**一条**告警）；
+ * - 未提供 → 用全局上限（`globalMax`，缺省 20）。
+ */
+function resolveFieldRowLimit(
+  fieldLimit: number | undefined,
+  globalMax: number | undefined,
+): { rows: number; invalid: boolean } {
+  if (typeof fieldLimit === 'number' && Number.isFinite(fieldLimit)) {
+    const floored = Math.floor(fieldLimit);
+    if (floored >= MIN_LINK_TABLE_ROWS && floored <= MAX_LINK_TABLE_ROWS) {
+      return { rows: floored, invalid: false };
+    }
+    return { rows: DEFAULT_LINK_TABLE_ROWS, invalid: true };
+  }
+  return { rows: resolveMaxRows(globalMax), invalid: false };
 }
 
 /** 该字段类型是否有**真实渲染器**（FallbackRenderer 视为不可用 → 不进默认列） */
@@ -154,11 +212,83 @@ export function pickLinkTableColumns(targetFieldMetas: ReadonlyArray<FieldMetaLi
   return ordered.map((meta) => ({ fieldId: meta.id, label: meta.name, meta }));
 }
 
+/* ===================== ⭐ 列解析（需求 2 · 第二阶段） ===================== */
+
+/** `resolveLinkTableColumns` 的产物 */
+export interface LinkColumnResolution {
+  columns: LinkColumn[];
+  /** 配置中「目标表找不到」而被跳过的字段 id（保序） */
+  droppedColumns: string[];
+  /** 配置列**全部失效** → 已回退默认列规则（否则 false） */
+  usedFallbackDefault: boolean;
+}
+
+/** 归一化「配置的列」：非数组 / 空 / 全空串 → `[]`（= 未配置，回退默认）；去空串、去重、保序 */
+function normalizeConfiguredColumns(raw: readonly string[] | undefined): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry === 'string' && entry !== '' && !out.includes(entry)) out.push(entry);
+  }
+  return out;
+}
+
+/**
+ * ⭐ **纯函数**：目标表字段元数据 + **用户配置** → 列解析结果。
+ *
+ * 裁定（需求 2 · 第二阶段，由 `req2-link-recon` 给出并报告理由）：
+ *  1. **配置即权威**：`linkColumns` 非空且至少一列有效时，**完全按用户给出的顺序**输出，
+ *     **不强制保留主字段**（用户显式不选它 = 用户不想要它；强制加回等于替用户做决定）。
+ *     未配置 / 空数组 → 走默认列规则（主字段 + 前 3 个可用字段，主字段恒第一）。
+ *  2. **非法列 → 跳过 + 记录**：配置里在目标表找不到的 fieldId **跳过该列**，收集进
+ *     `droppedColumns`（调用方据此告警）—— **绝不**因一列非法而整体失败。
+ *  3. **全部失效 → 回退默认列**：配置列一个都解析不出时回退默认列规则，并置
+ *     `usedFallbackDefault=true`（诚实告知「已回退默认列」）。
+ *  4. **不按可用性过滤配置列**：用户显式选的字段即使无专属渲染器也**照常保留**
+ *     （渲染层会给「暂不支持」占位，属**可见且诚实**），避免「用户配了却静默消失」。
+ */
+export function resolveLinkTableColumns(
+  targetFieldMetas: ReadonlyArray<FieldMetaLite>,
+  configured: readonly string[] | undefined,
+): LinkColumnResolution {
+  const list = Array.isArray(targetFieldMetas) ? targetFieldMetas : [];
+  const metasById: Record<string, FieldMetaLite> = {};
+  for (const meta of list) {
+    if (meta && typeof meta.id === 'string' && meta.id !== '') metasById[meta.id] = meta;
+  }
+
+  const wanted = normalizeConfiguredColumns(configured);
+  if (wanted.length === 0) {
+    return { columns: pickLinkTableColumns(list), droppedColumns: [], usedFallbackDefault: false };
+  }
+
+  const columns: LinkColumn[] = [];
+  const droppedColumns: string[] = [];
+  for (const fieldId of wanted) {
+    const meta = metasById[fieldId];
+    if (!meta) {
+      droppedColumns.push(fieldId);
+      continue;
+    }
+    columns.push({ fieldId: meta.id, label: meta.name, meta });
+  }
+
+  if (columns.length === 0) {
+    return { columns: pickLinkTableColumns(list), droppedColumns, usedFallbackDefault: true };
+  }
+  return { columns, droppedColumns, usedFallbackDefault: false };
+}
+
 /* ===================== 行构造（纯函数） ===================== */
 
 export interface BuildLinkTableOptions {
   /** 行上限（正整数）；缺省 {@link DEFAULT_LINK_TABLE_ROWS} */
   maxRows?: number;
+  /**
+   * ⭐ 需求 2 · 第二阶段：用户配置的**目标表字段 id**（顺序即列顺序）。
+   * 缺省 / 空 → 默认列规则；全部失效 → 回退默认列（见 {@link resolveLinkTableColumns}）。
+   */
+  columns?: readonly string[];
 }
 
 /**
@@ -167,6 +297,8 @@ export interface BuildLinkTableOptions {
  * - `rowRecords[i]` 与 `linkRef.recordIds[i]` **同序**；`null` / `undefined` = 该行读取失败
  *   → **保留占位行**（全空单元格），**绝不**静默丢行（`resolve/markdown` 一贯原则：
  *   静默消失比留空更糟 —— 用户不会怀疑「少了一行」）。
+ * - 列：`options.columns`（用户配置，顺序即列顺序）优先；未配置 / 全失效 → 默认列规则
+ *   （见 {@link resolveLinkTableColumns}）。被跳过的非法列记入 `droppedColumns`。
  * - 值一律经 `normalize()` 归一化（本节不另写字段格式化）。
  * - `recordId` **只**进结构，不进任何展示文本。
  */
@@ -176,7 +308,8 @@ export function buildLinkTable(
   rowRecords: ReadonlyArray<LinkRowRecord | null | undefined>,
   options: BuildLinkTableOptions = {},
 ): LinkTable {
-  const columns = pickLinkTableColumns(targetFieldMetas);
+  const resolution = resolveLinkTableColumns(targetFieldMetas, options.columns);
+  const columns = resolution.columns;
 
   const metasById: Record<string, FieldMetaLite> = {};
   for (const meta of Array.isArray(targetFieldMetas) ? targetFieldMetas : []) {
@@ -219,6 +352,8 @@ export function buildLinkTable(
   }
 
   const table: LinkTable = { columns, rows };
+  if (resolution.droppedColumns.length > 0) table.droppedColumns = resolution.droppedColumns;
+  if (resolution.usedFallbackDefault) table.columnsFallback = true;
   const hidden = ids.length - rows.length;
   if (hidden > 0) table.truncated = hidden;
   return table;
@@ -280,6 +415,113 @@ export function collectLinkFieldIds(
     }
   }
   return out;
+}
+
+/* ===================== ⭐ 关联列配置收集（需求 2 · 第二阶段） ===================== */
+
+/** `collectLinkFieldConfigs` 的产物 */
+export interface CollectedLinkConfigs {
+  /** 关联字段 id → 其显示列 / 行数上限配置 */
+  byField: Map<string, LinkFieldColumnConfig>;
+  /** 同一关联字段出现**互不相同**配置的字段 id（保序、去重）—— 调用方据此发**一条**告警 */
+  conflicts: string[];
+}
+
+/** 归一化配置里的 `linkColumns`：非数组 / 空 / 全空串 → `undefined`（= 未配置） */
+function normalizeConfiguredList(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry === 'string' && entry !== '' && !out.includes(entry)) out.push(entry);
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+/** 归一化配置里的 `linkRowLimit`：非有限数 → `undefined`（非法范围交由预取层收敛 + 告警） */
+function normalizeConfiguredRowLimit(raw: unknown): number | undefined {
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined;
+}
+
+/**
+ * ⭐ **纯函数**：从模板区块里收集每个关联字段的「显示列 / 行数上限」配置。
+ *
+ * 覆盖范围 = **唯一三处会画关联表格的落点**：`fieldList.items[]` / `keyValueGrid.rows[]` /
+ * `table(rowSource=linkedRecords)`。其余落点（paragraph/image/badgeRow/heading）不画表格，无配置。
+ *
+ * ⚠️ 同一个关联字段可能在多处出现（例如「字段清单」与「表格」都绑了它），但预取对每个字段
+ *    **只产出一张表** ⇒ **取首个出现的配置**（确定性），并把该字段记入 `conflicts`
+ *    供调用方发告警 —— **绝不静默丢弃**用户的一处配置。
+ *
+ * 非法值（`linkColumns` 非数组 / `linkRowLimit` 非有限数）在此**归一为「未配置」**
+ * （= 回退默认），保证「非法值收敛」而不抛错。
+ */
+export function collectLinkFieldConfigs(
+  blocks: ReadonlyArray<DocBlock>,
+  fields: ReadonlyArray<FieldMetaLite>,
+): CollectedLinkConfigs {
+  const byField = new Map<string, LinkFieldColumnConfig>();
+  const conflicts: string[] = [];
+
+  const metaById: Record<string, FieldMetaLite> = {};
+  for (const meta of Array.isArray(fields) ? fields : []) {
+    if (meta && typeof meta.id === 'string' && meta.id !== '') metaById[meta.id] = meta;
+  }
+  const isLinkField = (fieldId: unknown): fieldId is string => {
+    if (typeof fieldId !== 'string' || fieldId === '') return false;
+    const meta = metaById[fieldId];
+    return !!meta && LINK_FIELD_TYPES.includes(meta.type);
+  };
+
+  const consider = (fieldId: string, columns: string[] | undefined, rowLimit: number | undefined): void => {
+    if (columns === undefined && rowLimit === undefined) return; // 无有效配置 → 不记录
+    const config: LinkFieldColumnConfig = {};
+    if (columns !== undefined) config.columns = columns;
+    if (rowLimit !== undefined) config.rowLimit = rowLimit;
+    const existing = byField.get(fieldId);
+    if (!existing) {
+      byField.set(fieldId, config);
+      return;
+    }
+    if (JSON.stringify(existing) !== JSON.stringify(config) && !conflicts.includes(fieldId)) {
+      conflicts.push(fieldId);
+    }
+  };
+
+  for (const block of Array.isArray(blocks) ? blocks : []) {
+    if (!block || typeof block !== 'object') continue;
+    switch (block.kind) {
+      case 'keyValueGrid':
+        for (const row of block.rows ?? []) {
+          if (isLinkField(row.fieldId)) {
+            consider(row.fieldId, normalizeConfiguredList(row.linkColumns), normalizeConfiguredRowLimit(row.linkRowLimit));
+          }
+        }
+        break;
+      case 'fieldList':
+        for (const item of block.items ?? []) {
+          if (isLinkField(item.fieldId)) {
+            consider(
+              item.fieldId,
+              normalizeConfiguredList(item.linkColumns),
+              normalizeConfiguredRowLimit(item.linkRowLimit),
+            );
+          }
+        }
+        break;
+      case 'table':
+        if (block.rowSource.type === 'linkedRecords' && isLinkField(block.rowSource.fieldId)) {
+          consider(
+            block.rowSource.fieldId,
+            normalizeConfiguredList(block.linkColumns),
+            normalizeConfiguredRowLimit(block.linkRowLimit),
+          );
+        }
+        break;
+      default:
+        break;
+    }
+  }
+  return { byField, conflicts };
 }
 
 /* ===================== 预取编排 ===================== */
@@ -358,6 +600,20 @@ export async function prefetchLinkTables(args: PrefetchLinkTablesArgs): Promise<
   const fieldIds = collectLinkFieldIds(args.blocks, args.fields).slice(0, maxLinkFields);
   if (fieldIds.length === 0) return out;
 
+  /**
+   * ⭐ 需求 2 · 第二阶段：从区块里读取每个关联字段的「显示列 / 行数上限」配置。
+   * 选择「让预取直接读 blocks」而非在调用方拼 `linkColumnsByField` 的理由（内聚性）：
+   *  - `blocks` 本就是这个函数解析行来源、字段引用的**同一份纯输入**，配置与引用同源 ⇒
+   *    不会出现「引用来自 blocks、配置来自另一处」的**两份真相**错位；
+   *  - 调用方（`usePagedDocument`）**零改动**，不必为新增能力再造一个入参对象。
+   */
+  const { byField: configByField, conflicts } = collectLinkFieldConfigs(args.blocks, args.fields);
+  for (const conflictFieldId of conflicts) {
+    warn(PREFETCH_WARN_SCOPE, '同一关联字段存在多处不同的显示列配置，已采用首个出现的配置', {
+      fieldId: conflictFieldId,
+    });
+  }
+
   /** tableId → 目标表字段元数据（同一表只请求一次） */
   const metaCache = new Map<string, FieldMetaLite[]>();
   const metasOf = async (tableId: string): Promise<FieldMetaLite[]> => {
@@ -378,10 +634,18 @@ export async function prefetchLinkTables(args: PrefetchLinkTablesArgs): Promise<
     return metas;
   };
 
-  const maxRows = resolveMaxRows(args.maxRows);
-
   for (const fieldId of fieldIds) {
     if (!active()) return out;
+
+    /** ⭐ 需求 2 · 第二阶段：本字段的配置 + 收敛后的行上限（越界 → 默认 + 告警） */
+    const fieldConfig = configByField.get(fieldId);
+    const rowLimit = resolveFieldRowLimit(fieldConfig?.rowLimit, args.maxRows);
+    if (rowLimit.invalid) {
+      warn(PREFETCH_WARN_SCOPE, '关联记录行数上限需在 1~50 之间，已回退默认 20', {
+        fieldId,
+        value: fieldConfig?.rowLimit,
+      });
+    }
 
     let ref: LinkedRecordRef;
     try {
@@ -401,7 +665,7 @@ export async function prefetchLinkTables(args: PrefetchLinkTablesArgs): Promise<
     const targetMetas = await metasOf(ref.tableId);
     if (!active()) return out;
 
-    const wanted = ids.slice(0, maxRows);
+    const wanted = ids.slice(0, rowLimit.rows);
     const rowRecords = await Promise.all(
       wanted.map((id) =>
         sem.run(async (): Promise<LinkRowRecord | null> => {
@@ -420,7 +684,20 @@ export async function prefetchLinkTables(args: PrefetchLinkTablesArgs): Promise<
     );
     if (!active()) return out;
 
-    const table = buildLinkTable(ref, targetMetas, rowRecords, { maxRows });
+    const table = buildLinkTable(ref, targetMetas, rowRecords, {
+      maxRows: rowLimit.rows,
+      columns: fieldConfig?.columns,
+    });
+    // ⭐ 需求 2 · 第二阶段：配置列非法 / 全部失效 → **一条**告警（绝不静默改变用户预期的列）
+    if (table.droppedColumns && table.droppedColumns.length > 0) {
+      warn(PREFETCH_WARN_SCOPE, '配置的关联显示列在目标表中不存在，已跳过该列', {
+        fieldId,
+        dropped: table.droppedColumns,
+      });
+    }
+    if (table.columnsFallback === true) {
+      warn(PREFETCH_WARN_SCOPE, '配置的关联显示列全部无效，已回退默认列', { fieldId });
+    }
     // 无可用列（目标表元数据取不到）→ 不落表，渲染层回退到原有文本呈现（优雅降级）
     if (table.columns.length === 0) continue;
     out.set(fieldId, table);

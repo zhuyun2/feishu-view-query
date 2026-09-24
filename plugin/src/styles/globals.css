@@ -2200,3 +2200,76 @@
     min-width: 140px;
   }
 }
+
+/* ============ req2 第二阶段：编辑器「关联记录显示列」配置段 ============
+ * 位置：文档排版编辑器右栏「区块属性」表单底部（`LinkColumnsSection`）。
+ * ⚠️ 本块**只新增** `.cbv-linkcols*` 类，不改动任何既有块，也**不声明任何纸页 / 画布宽度**
+ *   （`DocLayoutEditor.test.tsx` 的「内容宽度不变式」守卫要求 T09 之后的追加块不得出现
+ *   纸页宽度声明；本块满足该约束）。
+ */
+@layer components {
+  .cbv-linkcols {
+    margin-bottom: var(--space-2);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .cbv-linkcols__item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin-bottom: var(--space-3);
+    padding: var(--space-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-bg-panel);
+  }
+
+  .cbv-linkcols__title {
+    font-size: var(--font-size-12);
+    color: var(--color-text-1);
+    font-weight: 500;
+  }
+
+  .cbv-linkcols__loading,
+  .cbv-linkcols__hint {
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+    line-height: var(--line-height-tight);
+  }
+
+  /* 降级文案：明确告知「将使用默认列」，**可保存**（不阻断） */
+  .cbv-linkcols__degraded {
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--font-size-11);
+    color: var(--color-warning);
+    background: var(--color-bg-app);
+    border: 1px dashed var(--color-divider);
+    border-radius: var(--radius-control);
+  }
+
+  .cbv-linkcols__limit {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .cbv-linkcols__limit-label {
+    flex: 0 0 auto;
+    font-size: var(--font-size-11);
+    color: var(--color-text-3);
+  }
+
+  .cbv-linkcols__limit .cbv-prop-field__control--num {
+    width: 72px;
+    flex: 0 0 auto;
+  }
+
+  /* 超出列上限的明确提示（拦截该次变更，绝不静默截断） */
+  .cbv-linkcols__error {
+    font-size: var(--font-size-11);
+    color: var(--color-error);
+  }
+}
+

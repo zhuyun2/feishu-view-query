@@ -279,11 +279,36 @@ export interface ParagraphBlock extends DocBlockBase {
   hideWhenEmpty: boolean;
 }
 
+/**
+ * ⭐ 需求 2 · 第二阶段：**文档字段绑定项**上的「关联记录显示列」配置（纯增，不升 `schemaVersion`）。
+ *
+ * 仅对绑定到**关联字段**（`Link` 18 / `DuplexLink` 21）的绑定项有意义：
+ * - `linkColumns` 的元素是**目标表**字段 id，**数组顺序即列显示顺序**；
+ * - 缺省（老配置 / 未配置）→ 默认列规则（主字段 + 前 3 个可用字段），行为与 v1.5.0 **逐字一致**（零回归）。
+ *
+ * ⚠️ **两个字段随 `detail.doc.blocks` 逐字透传**：`config/migrations.ts` 的
+ *   `assertCardViewConfig()` 在透传 `blocks` 时**原样搬运**（`blocks:` 分支），故**无需**
+ *   额外的透传代码；反之若将来有人在该分支做「逐字段重建」，这两个字段就会被静默抹掉
+ *   （= 「用户配了列、重开就没了」）。往返用例见 `migrations.linkColumns.test.ts`。
+ */
+export interface LinkTableColumnConfig {
+  /** 目标表字段 id 列表；顺序即列顺序。非数组 / 空数组 / 全空串 → 视为未配置（回退默认列）。 */
+  linkColumns?: string[];
+  /** 关联记录展示的最大行数（1~50）；缺省 20，越界回退默认并告警。 */
+  linkRowLimit?: number;
+}
+
+/** 字段绑定项（键值网格行 / 字段清单项）：在「一个字段引用」之上叠加关联列配置。 */
+export interface FieldBindingItem extends LinkTableColumnConfig {
+  fieldId: string;
+  labelOverride?: string;
+}
+
 /** 3. 键值网格 */
 export interface KeyValueGridBlock extends DocBlockBase {
   kind: 'keyValueGrid';
   columns: 1 | 2 | 3 | 4;
-  rows: Array<{ fieldId: string; labelOverride?: string }>;
+  rows: FieldBindingItem[];
   labelWidthPx: number; // 标签列宽
   showColon: boolean;
   zebra: boolean; // 斑马纹
@@ -293,7 +318,7 @@ export interface KeyValueGridBlock extends DocBlockBase {
 /** 4. 字段清单（纵向） */
 export interface FieldListBlock extends DocBlockBase {
   kind: 'fieldList';
-  items: Array<{ fieldId: string; labelOverride?: string }>;
+  items: FieldBindingItem[];
   showLabels: boolean;
   hideEmptyItems: boolean;
 }
@@ -320,7 +345,7 @@ export interface ImageBlock extends DocBlockBase {
 }
 
 /** 7. 表格 */
-export interface TableBlock extends DocBlockBase {
+export interface TableBlock extends DocBlockBase, LinkTableColumnConfig {
   kind: 'table';
   /** 列定义：可绑定字段，也可用静态表头 */
   columns: Array<{
@@ -329,7 +354,13 @@ export interface TableBlock extends DocBlockBase {
     widthPx?: number;
     align?: 'left' | 'center' | 'right';
   }>;
-  /** 行来源：关联记录 / 多选展开 / 单条记录字段（当前记录） */
+  /**
+   * 行来源：关联记录 / 多选展开 / 单条记录字段（当前记录）。
+   *
+   * ⭐ `rowSource = linkedRecords` 时，`columns` **不再决定**展示列（列来自**目标表**）；
+   * 展示列改由 {@link LinkTableColumnConfig.linkColumns}（目标表字段 id，顺序即列顺序）决定，
+   * 与 `fieldList` / `keyValueGrid` 的关联字段**共用同一套列解析**（见 `doc/linkTable.ts`）。
+   */
   rowSource: { type: 'linkedRecords'; fieldId: string } | { type: 'currentRecord' };
   showHeader: boolean;
   zebra: boolean;

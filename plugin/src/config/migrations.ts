@@ -226,6 +226,18 @@ export function assertCardViewConfig(raw: unknown): CardViewConfig {
               templateId: detailSource.doc.templateId ?? 'a4-default',
               pageSetup: { ...base.detail.doc.pageSetup, ...(detailSource.doc.pageSetup ?? {}) },
               theme: { ...defaultDocTheme(), ...(detailSource.doc.theme ?? {}) },
+              /**
+               * ⭐ **透传证据点（需求 2 · 第二阶段）**：`blocks` **原样搬运**（同一数组引用，
+               * 不逐字段重建）。因此挂在「文档字段绑定项」上的 `linkColumns` / `linkRowLimit`
+               * （`fieldList.items[]` / `keyValueGrid.rows[]` / `table`）**随块一并存活**，
+               * 「保存 → 重载」后不会消失 —— 故本功能**无需**新增透传代码。
+               *
+               * ⚠️ 反例（本项目历史事故形态）：`detail.docSource` / `detail.importedDocx` 因为
+               * `assertCardViewConfig()` **逐字段重建** `detail`，必须走上面的
+               * `sanitizeImportedDocx()` + 条件展开显式搬运，否则**每次读取都被静默抹掉**。
+               * 若将来有人把这里改成「逐字段重建 blocks」，`linkColumns` 会立刻丢失
+               * （守卫用例：`migrations.linkColumns.test.ts` 的「保存→重载→配置仍在」）。
+               */
               blocks: Array.isArray(detailSource.doc.blocks) ? detailSource.doc.blocks : [],
             }
           : base.detail.doc,

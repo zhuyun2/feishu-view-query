@@ -44,6 +44,7 @@ import type { FieldMetaLite } from '@/fields/fieldTypes';
 import { getCatalogEntry } from '@/doc/blockCatalog';
 import { createBlockIdFactory, defaultBlockFor } from '@/doc/blockDefaults';
 import type { BlockIdFactory } from '@/doc/blockDefaults';
+import { useLinkTargetFields } from '@/hooks/useLinkTargetFields';
 import { BlockLibrary } from './BlockLibrary';
 import { DocCanvas, DOC_CANVAS_DEFAULT_LOCALE } from './DocCanvas';
 import { DocPropertyPanel } from './DocPropertyPanel';
@@ -90,6 +91,13 @@ function DocLayoutEditorInner({
 }: DocLayoutEditorProps): ReactElement {
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [ghostLabel, setGhostLabel] = useState<string | null>(null);
+
+  /**
+   * ⭐ 需求 2 · 第二阶段：「关联记录显示列」的目标表字段候选（**按需**懒加载）。
+   * 右栏区块属性表单底部的配置段会 `ensure(fieldId)` 触发解析；
+   * 解析失败/无 tableId → 该段显示降级文案（不影响其它编辑）。
+   */
+  const { states: linkTargetFields, ensure: ensureLinkFields } = useLinkTargetFields(fields);
 
   // 新块 id：优先注入（测试确定性），否则模块级递增工厂（**不用**含随机/时间的 createId）
   const defaultFactory = useRef(createBlockIdFactory());
@@ -228,6 +236,8 @@ function DocLayoutEditorInner({
           onBlockDelete={handleBlockDelete}
           onPageSetupChange={handlePageSetupChange}
           onThemeChange={handleThemeChange}
+          linkTargetFields={linkTargetFields}
+          onEnsureLinkFields={ensureLinkFields}
         />
       </div>
       <DragOverlay dropAnimation={null}>

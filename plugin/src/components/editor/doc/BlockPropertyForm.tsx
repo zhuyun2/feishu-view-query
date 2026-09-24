@@ -19,9 +19,11 @@ import { memo } from 'react';
 import type { DocBlock, RuleCondition } from '@/config/types';
 import type { FieldMetaLite, FieldTypeValue } from '@/fields/fieldTypes';
 import { getFieldTypeLabel } from '@/fields/fieldTypes';
+import type { LinkTargetFieldsState } from '@/hooks/useLinkTargetFields';
 import { FieldSelect } from '@/components/common/FieldSelect';
 import type { FieldSelectOption } from '@/components/common/FieldSelect';
 import { getCatalogEntry } from '@/doc/blockCatalog';
+import { LinkColumnsSection } from './LinkColumnsSection';
 
 /* ============================ 模式（纯数据 / 纯函数） ============================ */
 
@@ -350,13 +352,27 @@ export interface BlockPropertyFormProps {
   onChange: (patch: Record<string, unknown>) => void;
   /** 删除该区块（缺省则不渲染删除按钮） */
   onDelete?: () => void;
+  /**
+   * ⭐ 需求 2 · 第二阶段：关联字段 id → **目标表字段状态**（「关联记录显示列」配置段用）。
+   * 缺省 = 未接线 → 该段显示降级文案（不可读取，按默认列）。
+   */
+  linkTargetFields?: Readonly<Record<string, LinkTargetFieldsState>>;
+  /** ⭐ 需求 2 · 第二阶段：按需解析关联字段的目标表字段（缺省 = 不可读取） */
+  onEnsureLinkFields?: (fieldId: string) => void;
 }
 
 function controlId(blockId: string, key: string): string {
   return `cbv-prop-${blockId}-${key.replace(/\./g, '-')}`;
 }
 
-function BlockPropertyFormInner({ block, fields, onChange, onDelete }: BlockPropertyFormProps): JSX.Element {
+function BlockPropertyFormInner({
+  block,
+  fields,
+  onChange,
+  onDelete,
+  linkTargetFields,
+  onEnsureLinkFields,
+}: BlockPropertyFormProps): JSX.Element {
   const kind = block.kind;
   const groups = groupedSchemaFor(kind);
 
@@ -611,6 +627,20 @@ function BlockPropertyFormInner({ block, fields, onChange, onDelete }: BlockProp
           ))}
         </section>
       ))}
+
+      {/*
+       * ⭐ 需求 2 · 第二阶段：「关联记录显示列」独立配置段。
+       * 仅当所选区块绑定了关联字段（Link/DuplexLink）时渲染（否则该组件返回 null）。
+       * 刻意**不并入** `PROP_SCHEMA`：该段依赖异步候选项 + 按绑定项区分，
+       * 与「纯数据 + 同步」的模式表不同构；独立成段可保持 12 类 `data-prop-key` 契约不变。
+       */}
+      <LinkColumnsSection
+        block={block}
+        fields={fields}
+        linkTargetFields={linkTargetFields}
+        onEnsure={onEnsureLinkFields}
+        onChange={onChange}
+      />
 
       {onDelete ? (
         <button type="button" className="cbv-btn cbv-btn--danger cbv-blockform__delete" onClick={onDelete}>
